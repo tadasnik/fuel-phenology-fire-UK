@@ -1,52 +1,53 @@
 import os
 import glob
-import pyproj
+import tomli
 import numpy as np
 import xarray as xr
 import pandas as pd
-import geopandas as gpd
+import spatial as sp
 from pathlib import Path
 from osgeo import gdal
 from scipy.ndimage import binary_erosion
 
 
-# Reproject and get UK region
-def osgb_to_lonlat(dfr):
-    dfr = dfr.reset_index()
-    transformer = pyproj.Transformer.from_crs("EPSG:27700", "EPSG:4326",
-                                              always_xy=True)
-    dfr['longitude'], dfr['latitude'] = transformer.transform(dfr['x'],
-                                                              dfr['y'])
-    dfr = dfr.drop(['x', 'y'], axis=1)
-    return dfr
+def file_name_without_extension(file_name):
+    """Return file name without extension"""
+    file_path = Path(file_name)
+    file_name_wt_ext = file_path.stem
+    return file_name_wt_ext
 
 
-def get_UK_climate_region(dfr, data_path):
-    regions = gpd.read_file(Path(data_path, 'HadUKP_regions.shp'))
-    regions = regions.set_crs('EPSG:27700')
-    regions = regions.to_crs('EPSG:4326')
-    geometry = gpd.points_from_xy(dfr.longitude, dfr.latitude)
-    gdf = gpd.GeoDataFrame(dfr, geometry=geometry, crs=4326)
-    pts = gpd.sjoin(regions, gdf)
-    pts = pts.drop(['geometry', 'index_right'], axis=1)
-    df = pd.DataFrame(pts)
-    return df
+def sampled_lc_file_path(lc: int,
+                         window_size: int,
+                         data_dir: str,
+                         land_cover_file_name: str):
+    """Return path of eroded pixels for the given land cover"""
+    file_base_str = file_name_without_extension(land_cover_file_name)
+    file_name = file_base_str + f'_sampled_eroded_{window_size}_lc_{lc}.parquet'
+    file_path = Path(data_dir, file_name)
+    return file_path
 
 
-def sample_regions(file_name, data_path, sample_size):
-    dfr = pd.read_parquet(Path(data_path, file_name)).reset_index()
-    if dfr.shape[0] > 50000000:
-        dfr = dfr.sample(n=50000000)
-    dfr = get_UK_climate_region(dfr)
-    dfr_sample = dfr.groupby('Region') \
-                    .sample(n=sample_size, replace=True) \
-                    .reset_index(drop=True)
-    return dfr_sample
+def eroded_lc_file_path(lc: int,
+                        window_size: int,
+                        data_dir: str,
+                        land_cover_file_name: str):
+    """Return path of eroded pixels for the given land cover"""
+    file_base_str = file_name_without_extension(land_cover_file_name)
+    file_name = file_base_str + f'_eroded_{window_size}_lc_{lc}.parquet'
+    file_path = Path(data_dir, file_name)
+    return file_path
+
+
+def sample_lc_regions(dfr, sample_size):
+    # First check counts per region
+    gdfr = dfr.groupby('Region')
+    sampled = gdfr.apply(lambda x: x.sample(min(len(x), sample_size)))
+    return sampled.reset_index(drop=True)
 
 
 def split_to_tiles(file_name):
-    file_path = Path(file_name)
-    file_name_wt_ext = file_path.with_suffix("")
+    file_name_wt_ext = file_name_without_extension(file_name)
     ds = gdal.Open(file_name, gdal.GA_ReadOnly)
     width = ds.RasterXSize
     height = ds.RasterYSize
@@ -57,21 +58,25 @@ def split_to_tiles(file_name):
             w = min(i+tilesize, width) - i
             h = min(j+tilesize, height) - j
             gdaltranString = "gdal_translate -of GTIFF -srcwin " + str(i) + \
-                            ", " + str(j) + ", " + str(w) + ", " + str(h) + \
-                            " " + file_name + " " + str(file_name_wt_ext) + \
-                            "_" + str(i) + "_" + str(j) + ".tif"
+                             ", " + str(j) + ", " + str(w) + ", " + str(h) + \
+                             " " + file_name + " " + file_name_wt_ext + \
+                             "_" + str(i) + "_" + str(j) + ".tif"
             os.system(gdaltranString)
 
 
-def ceh_tiles_binary_erosion(lc: int, window_size: int, data_path: str, file_base: str):
+def ceh_tiles_binary_erosion(lc: int,
+                             window_size: int,
+                             data_dir: str,
+                             land_cover_file_name: str):
     """
-    Reads CEH land cover raster tiles found in data_path that match file_base_*,
-    selects pixels that equal the lc argument, performs binary errosion using
-    window_size and saves the remaining data to dataframe.
+    Reads CEH land cover raster tiles found in data_dir that match
+    file_base_*, selects pixels that equal the lc argument, performs
+    binary errosion using window_size and saves the remaining
+    data to dataframe.
     """
     dfrs = []
-    tiles = glob.glob(str(Path(data_path, file_base + '_*.tif')))
-    #tiles = [x.split('2018')[1] for x in agb_tiles]
+    file_base = file_name_without_extension(land_cover_file_name)
+    tiles = glob.glob(str(Path(data_dir, file_base + '_*.tif')))
     print(lc)
     for tile in tiles:
         print(tile)
@@ -93,56 +98,67 @@ def ceh_tiles_binary_erosion(lc: int, window_size: int, data_path: str, file_bas
             continue
         dfrs.append(dfr)
     done = pd.concat(dfrs)
-    done.to_parquet(Path(data_path, file_base + f'_eroded_{window_size}_lc_{lc}.parquet'))
+    done.to_parquet(eroded_lc_file_path(lc, window_size, data_dir, land_cover_file_name))
 
 
-def sample_lc_region(lc, data_path, file_base, window_size):
-    dfr = pd.read_parquet(Path(data_path, file_base +
-                               f'_eroded_{window_size}_lc_{lc}.parquet'))
-    dfr = osgb_to_lonlat(dfr)
-    dfr = get_UK_region(dfr)
+if __name__ == "__main__":
+    ukceh_classes = {
+        1: 'Deciduous woodland',
+        2: 'Coniferous woodland',
+        3: 'Arable',
+        4: 'Improve grassland',
+        5: 'Neutral grassland',
+        6: 'Calcareous grassland',
+        7: 'Acid grassland',
+        8: 'Fen',
+        9: 'Heather',
+        10: 'Heather grassland',
+        11: 'Bog',
+        12: 'Inland rock',
+        13: 'Saltwater',
+        14: 'Freshwater',
+        15: 'Supralittoral rock',
+        16: 'Supralittoral sediment',
+        17: 'Littoral rock',
+        18: 'Littoral sediment',
+        19: 'Saltmarsh',
+        20: 'Urban',
+        21: 'Suburban'
+    }
 
-
-
-
-ukceh_classes = {
-    1: 'Deciduous woodland',
-    2: 'Coniferous woodland',
-    3: 'Arable',
-    4: 'Improve grassland',
-    5: 'Neutral grassland',
-    6: 'Calcareous grassland',
-    7: 'Acid grassland',
-    8: 'Fen',
-    9: 'Heather',
-    10: 'Heather grassland',
-    11: 'Bog',
-    12: 'Inland rock',
-    13: 'Saltwater',
-    14: 'Freshwater',
-    15: 'Supralittoral rock',
-    16: 'Supralittoral sediment',
-    17: 'Littoral rock',
-    18: 'Littoral sediment',
-    19: 'Saltmarsh',
-    20: 'Urban',
-    21: 'Suburban'
-}
-
-data_dir = '/Users/tadas/modFire/fire_lc_ndvi/data/cehlc'
+    with open("config.toml", mode="rb") as fp:
+        config = tomli.load(fp)
 # To split CEH product to tiles.
-# file_name = "LCD_2018.tif"
 # cur_dir = os.getcwd()
-# os.chdir(data_dir)
-# split_to_tiles(file_name)
+# os.chdir(config['data_dir'])
+# split_to_tiles(config['land_cover_file_name'])
 # os.chdir(cur_dir)
 
 # perform binary errosion on lc tiles
-# for lc in [1, 2, 3, 4, 7, 9, 10, 11]:
-#     ceh_tiles_binary_erosion(lc, 5, data_dir, 'LCD_2018')
+    """
+    for lc in config['land_covers']:
+        ceh_tiles_binary_erosion(lc,
+                                 config['window_size'],
+                                 config['data_dir'],
+                                 config['land_cover_file_name'])
 
+    """
+# reproject and add UK precipitation region column
+    """
+    for lc in config['land_covers']:
+        file_path = eroded_lc_file_path(lc,
+                                        config['window_size'],
+                                        config['data_dir'],
+                                        config['land_cover_file_name'])
 
-
-
-
-
+        dfr = pd.read_parquet(file_path)
+        dfr = sp.osgb_to_lonlat(dfr)
+        dfr = sp.get_UK_climate_region(dfr, config['regions_file'])
+        dfr.to_parquet(file_path)
+        sdfr = sample_lc_regions(dfr, 10000)
+        out_path = sampled_lc_file_path(lc,
+                                        config['window_size'],
+                                        config['data_dir'],
+                                        config['land_cover_file_name'])
+        sdfr.to_parquet(out_path)
+        """
