@@ -290,7 +290,6 @@ def drought_evi_vs_norm(pheg, fires):
         df = pd.read_parquet(file_name)
         # dem_sub = dem[(dem.Region == region) & (dem.lc == lc)]
         # df = pd.merge(df, dem_sub, on=['Region', 'lc', 'fid'], how='left')
-        df = df[df.elevation < 200]
         df["EVI2"] *= 0.0001
         # df = df[df["pixel_reliability"] < 5]
         df_sub = df[df.year == year]
@@ -369,11 +368,14 @@ def drought_evi_vs_norm(pheg, fires):
             which="major",
             labelsize="medium",
         )
+    """
     plt.savefig(
         Path(config["data_dir"], "results/figures", "drought_events.png"),
         dpi=300,
         bbox_inches="tight",
     )
+
+    """
     plt.show()
 
 
@@ -385,4 +387,5 @@ if __name__ == "__main__":
 
     # land_cover_evi(phe, fires)
     # drought_evi_vs_norm(pheg, fires)
+
     # region_evi(eviq, pheg, fires)

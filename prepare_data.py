@@ -270,9 +270,15 @@ def fire_event_phenology():
     ] = "Dormant"
     res.loc[
         (res.doy > res["Onset_Greenness_Increase_1"])
+        & (res.doy <= res["Date_Mid_Greenup_Phase_1"]),
+        "season",
+    ] = "Increase_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Greenup_Phase_1"])
         & (res.doy <= res["Onset_Greenness_Maximum_1"]),
         "season",
-    ] = "Increase"
+    ] = "Increase_late"
+
     res.loc[
         (res.doy > res["Onset_Greenness_Maximum_1"])
         & (res.doy <= res["Onset_Greenness_Decrease_1"]),
@@ -280,9 +286,15 @@ def fire_event_phenology():
     ] = "Maximum"
     res.loc[
         (res.doy > res["Onset_Greenness_Decrease_1"])
+        & (res.doy <= res["Date_Mid_Senescence_Phase_1"]),
+        "season",
+    ] = "Decrease_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Senescence_Phase_1"])
         & (res.doy <= res["Onset_Greenness_Minimum_1"]),
         "season",
-    ] = "Decraese"
+    ] = "Decrease_late"
+
     res["season_green"] = 0
     res.loc[
         (res.doy < res["Date_Mid_Senescence_Phase_1"])
@@ -348,10 +360,10 @@ if __name__ == "__main__":
     # eviq = evi_quantiles()
     # phe:= combine_phenology()
     # pheg = phenology_quantiles()
-    # fire = UK_fire_dfr(
-    #     "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_06_21.parquet",
-    #     config["regions_file"],
-    # )
+    fire = UK_fire_dfr(
+        "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_07_16.parquet",
+        config["regions_file"],
+    )
     # dem = combine_dem()
     # evi_files_to_parquet()
     # evi_quentiles_land_cover()

@@ -102,39 +102,13 @@ def ceh_tiles_binary_erosion(lc: int,
 
 
 if __name__ == "__main__":
-    ukceh_classes = {
-        1: 'Deciduous woodland',
-        2: 'Coniferous woodland',
-        3: 'Arable',
-        4: 'Improve grassland',
-        5: 'Neutral grassland',
-        6: 'Calcareous grassland',
-        7: 'Acid grassland',
-        8: 'Fen',
-        9: 'Heather',
-        10: 'Heather grassland',
-        11: 'Bog',
-        12: 'Inland rock',
-        13: 'Saltwater',
-        14: 'Freshwater',
-        15: 'Supralittoral rock',
-        16: 'Supralittoral sediment',
-        17: 'Littoral rock',
-        18: 'Littoral sediment',
-        19: 'Saltmarsh',
-        20: 'Urban',
-        21: 'Suburban'
-    }
+    # To split CEH product to tiles.
+    # cur_dir = os.getcwd()
+    # os.chdir(config['data_dir'])
+    # split_to_tiles(config['land_cover_file_name'])
+    # os.chdir(cur_dir)
 
-    with open("config.toml", mode="rb") as fp:
-        config = tomli.load(fp)
-# To split CEH product to tiles.
-# cur_dir = os.getcwd()
-# os.chdir(config['data_dir'])
-# split_to_tiles(config['land_cover_file_name'])
-# os.chdir(cur_dir)
-
-# perform binary errosion on lc tiles
+    # perform binary errosion on lc tiles
     """
     for lc in config['land_covers']:
         ceh_tiles_binary_erosion(lc,
