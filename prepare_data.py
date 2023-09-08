@@ -29,6 +29,12 @@ def q95(x):
     return x.quantile(0.95)
 
 
+def lon_lat_to_int(dfr, multiplier):
+    dfr["longitude"] = (dfr.longitude * multiplier).astype(int)
+    dfr["latitude"] = (dfr.latitude * multiplier).astype(int)
+    return dfr
+
+
 def dem_file():
     file_name = Path(config["data_dir"], "results", "merit_dem.parquet")
     return file_name
@@ -48,6 +54,12 @@ def phenology_quantiles_file():
     return file_name
 
 
+def evi2_quantiles_monthly_file():
+    window = config["window_size"]
+    file_name = Path(config["data_dir"], "results", f"evi2_quantiles_{window}.parquet")
+    return file_name
+
+
 def evi2_quantiles_file():
     window = config["window_size"]
     file_name = Path(config["data_dir"], "results", f"evi2_quantiles_{window}.parquet")
@@ -59,9 +71,43 @@ def fire_file_name():
     return file_name
 
 
+def fwi_file_name():
+    file_name = Path(config["data_dir"], "results", "UK_fwi.parquet")
+    return file_name
+
+
+def fwi_quantiles_file_name():
+    file_name = Path(config["data_dir"], "results", "UK_fwi_quantiles.parquet")
+    return file_name
+
+
+def fwi_quantiles_monthly_file_name():
+    file_name = Path(config["data_dir"], "results", "UK_fwi_quantiles_monthly.parquet")
+    return file_name
+
+
+def fwi_quantiles():
+    file_name = fwi_file_name()
+    fwi = pd.read_parquet(file_name)
+    subg = fwi.groupby(["Region", "year", "month"])
+    subg = subg.agg(
+        {
+            "fbupinx": [q5, q25, q50, q75, q95],
+            "infsinx": [q5, q25, q50, q75, q95],
+            "fwinx": [q5, q25, q50, q75, q95],
+            "dufmcode": [q5, q25, q50, q75, q95],
+            "ffmcode": [q5, q25, q50, q75, q95],
+            "drtcode": [q5, q25, q50, q75, q95],
+        }
+    )
+    out_file_name = fwi_quantiles_monthly_file_name()
+    subg.to_parquet(out_file_name)
+
+
 def fire_phenology_file_name():
     file_name = Path(config["data_dir"], "results", "UK_fire_phenology_dates.parquet")
     return file_name
+
 
 def phenology_doy(dfr):
     """Convert VNP22Q2 product date columns to standard dates"""
@@ -211,6 +257,7 @@ def evi_quantiles():
             # Select good quality observations
             df = df[df["pixel_reliability"] < 5]
             df["date"] = pd.to_datetime(df.date)
+            df["month"] = df.date.dt.month
             df["woy"] = df.date.dt.isocalendar().week
             df["doy"] = df.date.dt.dayofyear
             df["year"] = df.date.dt.year
@@ -218,7 +265,7 @@ def evi_quantiles():
             df["Region"] = region
             dfrs.append(df)
         dfr_evi = pd.concat(dfrs)
-        dfrg = dfr_evi.groupby(["Region", "doy"]).agg(
+        dfrg = dfr_evi.groupby(["Region", "year", "month"]).agg(
             {"EVI2": [q5, q25, q50, q75, q95]}
         )
         dfrg.columns = dfrg.columns.droplevel(level=0)
@@ -226,7 +273,7 @@ def evi_quantiles():
         dfrg = dfrg.reset_index()
         results.append(dfrg)
     eviq = pd.concat(results)
-    eviq_file_name = evi2_quantiles_file()
+    eviq_file_name = evi2_quantiles_monthly_file()
     eviq.to_parquet(eviq_file_name)
     return eviq
 
@@ -247,6 +294,93 @@ def UK_fire_dfr(file_path: str, regions_file_path: str):
     fire.to_parquet(file_name)
     return fire
 
+
+def UK_fwi_dfr(file_path: str, regions_file_path: str):
+    """Read and prepare CEMS FWI indices"""
+    fwi = pd.read_parquet(file_path)
+    fwi = fwi.drop("surface", axis=1)
+    fwi_ = sp.get_UK_climate_region(
+        fwi[fwi.time == fwi.time.iloc[0]], regions_file_path
+    )
+    fwi = lon_lat_to_int(fwi, 100)
+    fwi_ = lon_lat_to_int(fwi_, 100)
+    fwi = fwi.merge(
+        fwi_[["longitude", "latitude", "Region"]],
+        on=["longitude", "latitude"],
+        how="left",
+    )
+    fwi = fwi.dropna()
+    fwi = fwi.rename({"time": "date"}, axis=1)
+    fwi["year"] = fwi.date.dt.year
+    fwi["month"] = fwi.date.dt.month
+    fwi["doy"] = fwi.date.dt.dayofyear
+    fwi["dow"] = fwi.date.dt.dayofweek
+    fwi["woy"] = fwi.date.dt.isocalendar().week
+    file_name = fwi_file_name()
+    fwi.to_parquet(file_name)
+    return fwi
+
+
+def region_lc_phenology(dfr):
+    """Determine fuel phenological season per Region and lc for arbitrary dataset"""
+    pheq = pd.read_parquet(phenology_quantiles_file())
+    columns = [
+        "Onset_Greenness_Increase_1",
+        "Date_Mid_Greenup_Phase_1",
+        "Onset_Greenness_Maximum_1",
+        "Onset_Greenness_Decrease_1",
+        "Date_Mid_Senescence_Phase_1",
+        "Onset_Greenness_Minimum_1",
+    ]
+    pheq50 = pheq.loc[:, (slice(None), "q50")].droplevel(level=1, axis=1)
+    res = pd.merge(
+        dfr,
+        pheq50.reset_index()[columns + ["Region", "lc"]],
+        on=["Region", "lc"],
+        how="left",
+    )
+    res["season"] = None
+    res.loc[
+        (res.doy <= res["Onset_Greenness_Increase_1"])
+        | (res.doy > res["Onset_Greenness_Minimum_1"]),
+        "season",
+    ] = "Dormant"
+    res.loc[
+        (res.doy > res["Onset_Greenness_Increase_1"])
+        & (res.doy <= res["Date_Mid_Greenup_Phase_1"]),
+        "season",
+    ] = "Increase_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Greenup_Phase_1"])
+        & (res.doy <= res["Onset_Greenness_Maximum_1"]),
+        "season",
+    ] = "Increase_late"
+
+    res.loc[
+        (res.doy > res["Onset_Greenness_Maximum_1"])
+        & (res.doy <= res["Onset_Greenness_Decrease_1"]),
+        "season",
+    ] = "Maximum"
+    res.loc[
+        (res.doy > res["Onset_Greenness_Decrease_1"])
+        & (res.doy <= res["Date_Mid_Senescence_Phase_1"]),
+        "season",
+    ] = "Decrease_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Senescence_Phase_1"])
+        & (res.doy <= res["Onset_Greenness_Minimum_1"]),
+        "season",
+    ] = "Decrease_late"
+
+    res["season_green"] = 0
+    res.loc[
+        (res.doy < res["Date_Mid_Senescence_Phase_1"])
+        & (res.doy > res["Date_Mid_Greenup_Phase_1"]),
+        "season_green",
+    ] = 1
+    return res
+
+
 def fire_event_phenology():
     """Determine fuel phenological season for VIIRS fire events"""
     fire = pd.read_parquet(fire_file_name())
@@ -260,8 +394,12 @@ def fire_event_phenology():
         "Onset_Greenness_Minimum_1",
     ]
     pheq50 = pheq.loc[:, (slice(None), "q50")].droplevel(level=1, axis=1)
-    res = pd.merge(fire, pheq50.reset_index()[columns + ["Region", "lc"]],
-                   on=["Region", "lc"], how="left")
+    res = pd.merge(
+        fire,
+        pheq50.reset_index()[columns + ["Region", "lc"]],
+        on=["Region", "lc"],
+        how="left",
+    )
     res["season"] = None
     res.loc[
         (res.doy <= res["Onset_Greenness_Increase_1"])
@@ -309,7 +447,9 @@ def fire_event_phenology():
 def fire_pixel_phenology_season():
     """Determine fuel phenological season for VIIRS fire detections"""
     fire = pd.read_parquet(fire_file_name())
-    fire_phen = pd.read_csv(Path(config["data_dir"], 'gee_results', 'masked_fire_mean_phen_all_events.csv'))
+    fire_phen = pd.read_csv(
+        Path(config["data_dir"], "gee_results", "masked_fire_mean_phen_all_events.csv")
+    )
     columns = [
         "Onset_Greenness_Increase_1",
         "Date_Mid_Greenup_Phase_1",
@@ -318,11 +458,17 @@ def fire_pixel_phenology_season():
         "Date_Mid_Senescence_Phase_1",
         "Onset_Greenness_Minimum_1",
     ]
-    fire_phen['year'] = [int(x.split('_')[0]) for x in fire_phen['system:index'].astype(str)]
+    fire_phen["year"] = [
+        int(x.split("_")[0]) for x in fire_phen["system:index"].astype(str)
+    ]
     fire_phen = phenology_doy(fire_phen)
-    fire_phen = fire_phen.drop(['system:index', '.geo'], axis=1)
-    res = pd.merge(fire, fire_phen.reset_index()[columns + ["Region", "lc"]],
-                   on=["Region", "lc"], how="left")
+    fire_phen = fire_phen.drop(["system:index", ".geo"], axis=1)
+    res = pd.merge(
+        fire,
+        fire_phen.reset_index()[columns + ["Region", "lc"]],
+        on=["Region", "lc"],
+        how="left",
+    )
     res["season"] = None
     res.loc[
         (res.doy <= res["Onset_Greenness_Increase_1"])
@@ -355,101 +501,24 @@ def fire_pixel_phenology_season():
     return res
 
 
-
 if __name__ == "__main__":
     # eviq = evi_quantiles()
     # phe:= combine_phenology()
     # pheg = phenology_quantiles()
-    fire = UK_fire_dfr(
-        "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_07_16.parquet",
-        config["regions_file"],
-    )
+    # fire = UK_fire_dfr(
+    #     "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_07_16.parquet",
+    #     config["regions_file"],
+    # )
     # dem = combine_dem()
     # evi_files_to_parquet()
     # evi_quentiles_land_cover()
-    fire_event_phenology()
-
-    """
-    fire = pd.read_parquet(fire_file_name())
-    pheq = pd.read_parquet(phenology_quantiles_file())
-    # ph_dates = pheg.loc[lc][date_cols][:, "q50"]
-    fire_g = (
-        fire.groupby(["event"])[["doy", "year", "date", "size", "Region"]]
-        .min()
-        .reset_index()
-    )
-    fire_g["lc"] = (
-        fire.groupby("event")[["lc"]].agg(lambda x: pd.Series.mode(x)[0]).values
-    )
-    fire_g["Region"] = (
-        fire.groupby("event")[["Region"]].agg(lambda x: pd.Series.mode(x)[0]).values
-    )
-    columns = [
-        "Onset_Greenness_Increase_1",
-        "Date_Mid_Greenup_Phase_1",
-        "Onset_Greenness_Maximum_1",
-        "Onset_Greenness_Decrease_1",
-        "Date_Mid_Senescence_Phase_1",
-        "Onset_Greenness_Minimum_1",
-    ]
-    pheq50 = pheq.loc[:, (slice(None), "q50")].droplevel(level=1, axis=1)
-
-    resg = pd.merge(fire_g, pheq50.reset_index(), on=["Region", "lc"], how="left")
-
-    res = pd.merge(fire, pheq50.reset_index(), on=["Region", "lc"], how="left")
-
-    res["season"] = 0
-    res.loc[
-        (res.doy <= res["Onset_Greenness_Increase_1"])
-        | (res.doy > res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Dormant"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Increase_1"])
-        & (res.doy <= res["Onset_Greenness_Maximum_1"]),
-        "season",
-    ] = "Increase"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Maximum_1"])
-        & (res.doy <= res["Onset_Greenness_Decrease_1"]),
-        "season",
-    ] = "Maximum"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Decrease_1"])
-        & (res.doy <= res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Decraese"
-    res["season_green"] = 0
-    res.loc[
-        (res.doy < res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy > res["Date_Mid_Greenup_Phase_1"]),
-        "season_green",
-    ] = 1
-
-    dormant_events = resg[(resg.doy < resg["Onset_Greenness_Increase_1"])]
-    spring_events = resg[(resg.doy >= resg["Onset_Greenness_Increase_1"])]
-    summer_events = resg[(resg.doy > resg["Onset_Greenness_Maximum_1"])]
-    autumn_events = resg[(resg.doy > resg["Onset_Greenness_Decrease_1"])]
-    dormant_events_2 = resg[(resg.doy > resg["Onset_Greenness_Minimum_1"])]
-    green_events = resg[
-        (resg.doy < resg["Date_Mid_Senescence_Phase_1"])
-        & (resg.doy > resg["Date_Mid_Greenup_Phase_1"])
-    ]
-
-    resg["season"] = 0
-    resg.loc[resg.event.isin(dormant_events.event), "season"] = "Dormant"
-    resg.loc[resg.event.isin(spring_events.event), "season"] = "Increase"
-    resg.loc[resg.event.isin(summer_events.event), "season"] = "Maximum"
-    resg.loc[resg.event.isin(autumn_events.event), "season"] = "Decrease"
-    resg.loc[resg.event.isin(dormant_events_2.event), "season"] = "Dormant"
-
-    resg["season_green"] = 0
-    resg.loc[resg.event.isin(green_events.event), "season_green"] = 1
-    resg = resg[resg.season != 0]
-
-    dormant_events = resg[(resg.doy<=resg['Onset_Greenness_Increase_1'])|(resg.doy>resg['Onset_Greenness_Minimum_1'])]
-    espring_events = resg[(resg.doy>resg['Onset_Greenness_Increase_1'])&(resg.doy<=resg['Date_Mid_Greenup_Phase_1'])]
-    lspring_events = resg[(resg.doy>resg['Date_Mid_Greenup_Phase_1'])&(resg.doy<=resg['Onset_Greenness_Maximum_1'])]
-    summer_events = resg[(resg.doy>resg['Onset_Greenness_Maximum_1'])&(resg.doy<=resg['Onset_Greenness_Decrease_1'])]
-    autumn_events = resg[(resg.doy>resg['Onset_Greenness_Decrease_1'])&(resg.doy<=resg['Onset_Greenness_Minimum_1'])]
-    """
+    # evi_quantiles()
+    # fire_event_phenology()
+    # fwi = UK_fwi_dfr(
+    #     "/Users/tadas/modFire/fire_lc_ndvi/data/fwi/uk_fwi_variables_2012_2022.parquet",
+    #     config["regions_file"],
+    # )
+    #
+    # fwi_quantiles()
+    # fwi = pd.read_parquet(fwi_file_name())
+    # fwi_ph = region_lc_phenology(fwi)
