@@ -24,9 +24,14 @@ def q75(x):
     return x.quantile(0.75)
 
 
-# 50th Percentile
+# 95 Percentile
 def q95(x):
     return x.quantile(0.95)
+
+
+# 99 Percentile
+def q99(x):
+    return x.quantile(0.99)
 
 
 def lon_lat_to_int(dfr, multiplier):
@@ -66,6 +71,12 @@ def evi2_quantiles_file():
     return file_name
 
 
+def evi2_phen_phase_file():
+    window = config["window_size"]
+    file_name = Path(config["data_dir"], "results", f"evi2_phenology_yearly_{window}.parquet")
+    return file_name
+
+
 def fire_file_name():
     file_name = Path(config["data_dir"], "results", "UK_fire.parquet")
     return file_name
@@ -86,7 +97,30 @@ def fwi_quantiles_monthly_file_name():
     return file_name
 
 
-def fwi_quantiles():
+def fwi_phen_phase_file():
+    file_name = Path(config["data_dir"], "results", "UK_fwi_phen_phase.parquet")
+    return file_name
+
+
+def fwi_doy_quantiles():
+    file_name = fwi_file_name()
+    fwi = pd.read_parquet(file_name)
+    subg = fwi.groupby(["Region", "doy"])
+    subg = subg.agg(
+        {
+            "fbupinx": [q5, q25, q50, q75, q95, q99],
+            "infsinx": [q5, q25, q50, q75, q95, q99],
+            "fwinx": [q5, q25, q50, q75, q95, q99],
+            "dufmcode": [q5, q25, q50, q75, q95, q99],
+            "ffmcode": [q5, q25, q50, q75, q95, q99],
+            "drtcode": [q5, q25, q50, q75, q95, q99],
+        }
+    )
+    out_file_name = fwi_quantiles_file_name()
+    subg.to_parquet(out_file_name)
+
+
+def fwi_monthly_quantiles():
     file_name = fwi_file_name()
     fwi = pd.read_parquet(file_name)
     subg = fwi.groupby(["Region", "year", "month"])
@@ -102,6 +136,8 @@ def fwi_quantiles():
     )
     out_file_name = fwi_quantiles_monthly_file_name()
     subg.to_parquet(out_file_name)
+
+
 
 
 def fire_phenology_file_name():
@@ -321,8 +357,11 @@ def UK_fwi_dfr(file_path: str, regions_file_path: str):
     return fwi
 
 
-def region_lc_phenology(dfr):
-    """Determine fuel phenological season per Region and lc for arbitrary dataset"""
+def fwi_region_lc_phenology():
+    """Determine fuel phenological season for land covers per Region
+    for an arbitrary dataset (dfr)"""
+    file_name = fwi_file_name()
+    fwi = pd.read_parquet(file_name)
     pheq = pd.read_parquet(phenology_quantiles_file())
     columns = [
         "Onset_Greenness_Increase_1",
@@ -332,53 +371,64 @@ def region_lc_phenology(dfr):
         "Date_Mid_Senescence_Phase_1",
         "Onset_Greenness_Minimum_1",
     ]
-    pheq50 = pheq.loc[:, (slice(None), "q50")].droplevel(level=1, axis=1)
-    res = pd.merge(
-        dfr,
-        pheq50.reset_index()[columns + ["Region", "lc"]],
-        on=["Region", "lc"],
-        how="left",
-    )
-    res["season"] = None
-    res.loc[
-        (res.doy <= res["Onset_Greenness_Increase_1"])
-        | (res.doy > res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Dormant"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Increase_1"])
-        & (res.doy <= res["Date_Mid_Greenup_Phase_1"]),
-        "season",
-    ] = "Increase_early"
-    res.loc[
-        (res.doy > res["Date_Mid_Greenup_Phase_1"])
-        & (res.doy <= res["Onset_Greenness_Maximum_1"]),
-        "season",
-    ] = "Increase_late"
+    results = []
+    for lc in config["land_covers"]:
+        pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(level=1, axis=1)
+        res = pd.merge(
+            fwi,
+            pheq50.reset_index()[columns + ["Region"]],
+            on=["Region"],
+            how="left",
+        )
+        res = phenology_phase_columns(res)
+        res["lc"] = lc
+        results.append(res)
+    results = pd.concat(results)
+    results.to_parquet(fwi_phen_phase_file())
 
-    res.loc[
-        (res.doy > res["Onset_Greenness_Maximum_1"])
-        & (res.doy <= res["Onset_Greenness_Decrease_1"]),
-        "season",
-    ] = "Maximum"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Decrease_1"])
-        & (res.doy <= res["Date_Mid_Senescence_Phase_1"]),
-        "season",
-    ] = "Decrease_early"
-    res.loc[
-        (res.doy > res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy <= res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Decrease_late"
 
-    res["season_green"] = 0
-    res.loc[
-        (res.doy < res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy > res["Date_Mid_Greenup_Phase_1"]),
-        "season_green",
-    ] = 1
-    return res
+def evi_region_lc_phenology():
+    """Determine fuel phenological season for land covers per Region
+    for an arbitrary dataset (dfr)"""
+    pheq = pd.read_parquet(phenology_quantiles_file())
+    columns = [
+        "Onset_Greenness_Increase_1",
+        "Date_Mid_Greenup_Phase_1",
+        "Onset_Greenness_Maximum_1",
+        "Onset_Greenness_Decrease_1",
+        "Date_Mid_Senescence_Phase_1",
+        "Onset_Greenness_Minimum_1",
+    ]
+    results = []
+    for lc in config["land_covers"]:
+        for region in config["regions"]:
+            file_name = Path(
+                config["data_dir"], "gee_results", f"VNP13A1_{region}_{lc}_sample.csv"
+            )
+            try:
+                df = pd.read_csv(file_name)
+            except FileNotFoundError:
+                continue
+            # Select good quality observations
+            df = df[df["pixel_reliability"] < 5]
+            df["date"] = pd.to_datetime(df.date)
+            df["doy"] = df.date.dt.dayofyear
+            df["year"] = df.date.dt.year
+            df["lc"] = lc
+            df["Region"] = region
+            pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(level=1, axis=1)
+            res = pd.merge(
+                df,
+                pheq50.reset_index()[columns + ["Region"]],
+                on=["Region"],
+                how="left",
+            )
+            res = phenology_phase_columns(res)
+            resg = res.groupby(["Region", "lc", "season", "year"])["EVI2"].quantile(.25)
+            resg = resg.reset_index()
+            results.append(resg)
+    results = pd.concat(results)
+    pd.DataFrame(results).to_parquet(evi2_phen_phase_file())
 
 
 def fire_event_phenology():
@@ -400,45 +450,7 @@ def fire_event_phenology():
         on=["Region", "lc"],
         how="left",
     )
-    res["season"] = None
-    res.loc[
-        (res.doy <= res["Onset_Greenness_Increase_1"])
-        | (res.doy > res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Dormant"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Increase_1"])
-        & (res.doy <= res["Date_Mid_Greenup_Phase_1"]),
-        "season",
-    ] = "Increase_early"
-    res.loc[
-        (res.doy > res["Date_Mid_Greenup_Phase_1"])
-        & (res.doy <= res["Onset_Greenness_Maximum_1"]),
-        "season",
-    ] = "Increase_late"
-
-    res.loc[
-        (res.doy > res["Onset_Greenness_Maximum_1"])
-        & (res.doy <= res["Onset_Greenness_Decrease_1"]),
-        "season",
-    ] = "Maximum"
-    res.loc[
-        (res.doy > res["Onset_Greenness_Decrease_1"])
-        & (res.doy <= res["Date_Mid_Senescence_Phase_1"]),
-        "season",
-    ] = "Decrease_early"
-    res.loc[
-        (res.doy > res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy <= res["Onset_Greenness_Minimum_1"]),
-        "season",
-    ] = "Decrease_late"
-
-    res["season_green"] = 0
-    res.loc[
-        (res.doy < res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy > res["Date_Mid_Greenup_Phase_1"]),
-        "season_green",
-    ] = 1
+    res = phenology_phase_columns(res)
     file_name = fire_phenology_file_name()
     res.to_parquet(file_name)
     return res
@@ -469,6 +481,16 @@ def fire_pixel_phenology_season():
         on=["Region", "lc"],
         how="left",
     )
+    res = phenology_phase_columns(res)
+    file_name = fire_phenology_file_name()
+    res.to_parquet(file_name)
+    return res
+
+
+def phenology_phase_columns(res):
+
+    """Add columns with phenology phase given day of year
+    column for arbitrary dataframe"""
     res["season"] = None
     res.loc[
         (res.doy <= res["Onset_Greenness_Increase_1"])
@@ -477,9 +499,15 @@ def fire_pixel_phenology_season():
     ] = "Dormant"
     res.loc[
         (res.doy > res["Onset_Greenness_Increase_1"])
+        & (res.doy <= res["Date_Mid_Greenup_Phase_1"]),
+        "season",
+    ] = "Increase_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Greenup_Phase_1"])
         & (res.doy <= res["Onset_Greenness_Maximum_1"]),
         "season",
-    ] = "Increase"
+    ] = "Increase_late"
+
     res.loc[
         (res.doy > res["Onset_Greenness_Maximum_1"])
         & (res.doy <= res["Onset_Greenness_Decrease_1"]),
@@ -487,18 +515,19 @@ def fire_pixel_phenology_season():
     ] = "Maximum"
     res.loc[
         (res.doy > res["Onset_Greenness_Decrease_1"])
+        & (res.doy <= res["Date_Mid_Senescence_Phase_1"]),
+        "season",
+    ] = "Decrease_early"
+    res.loc[
+        (res.doy > res["Date_Mid_Senescence_Phase_1"])
         & (res.doy <= res["Onset_Greenness_Minimum_1"]),
         "season",
-    ] = "Decraese"
-    res["season_green"] = 0
-    res.loc[
-        (res.doy < res["Date_Mid_Senescence_Phase_1"])
-        & (res.doy > res["Date_Mid_Greenup_Phase_1"]),
-        "season_green",
-    ] = 1
-    file_name = fire_phenology_file_name()
-    res.to_parquet(file_name)
+    ] = "Decrease_late"
     return res
+
+    def prepare_lc_counts_per_region():
+        """TODO finish if needed"""
+        dfr = pd.read_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
 
 
 if __name__ == "__main__":
@@ -519,6 +548,8 @@ if __name__ == "__main__":
     #     config["regions_file"],
     # )
     #
-    # fwi_quantiles()
+    fwi_doy_quantiles()
     # fwi = pd.read_parquet(fwi_file_name())
     # fwi_ph = region_lc_phenology(fwi)
+    # fwi_region_lc_phenology()
+    # evi_region_lc_phenology()

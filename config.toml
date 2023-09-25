@@ -1,0 +1,10 @@
+data_dir = "/Users/tadas/modFire/fire_lc_ndvi/data/cehlc"
+regions_file = "/Users/tadas/modFire/fire_lc_ndvi/data/HadUKP_regions.shp" 
+land_cover_file_name = "LCD_2018.tif"
+window_size = 5
+land_covers = [1, 2, 3, 4, 7, 9, 10, 11]
+regions = ['Northern Scotland', 'Eastern Scotland', 'Southern Scotland',
+'North-west', 'North-east', 'Northern Ireland', 'South-west', 'Central', 'South-east']
+sample_size = 10000
+
+

@@ -1,23 +1,13 @@
-import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
-from scipy import stats
 from matplotlib.ticker import FuncFormatter
 from matplotlib.dates import MonthLocator, num2date
-from configuration import config, color_dict, ukceh_classes
+from configuration import config, color_dict
 from prepare_data import (
-    q5,
-    q25,
-    q50,
-    q75,
-    q95,
-    evi2_quantiles_file,
-    phenology_quantiles_file,
     fire_phenology_file_name,
     phenology_file,
-    fire_file_name,
     fwi_file_name,
     fwi_quantiles_file_name,
 )
@@ -94,11 +84,10 @@ def region_fwi_phen_box(fwi, phe):
     # )
     plt.show()
 
-
-def region_fwi_phen_doy(fwi):
+def region_fwi_phen_isi_bui_doy(fwi):
     regions = config["regions"]
     fig, axs = plt.subplots(3, 3, figsize=(10, 7))
-    var_labels = ["Fine Fuel Moisture Code", "Duff Moisture Code", ]
+    var_labels = ["Fine Fuel Moisture Code (FFMC)", "Duff Moisture Code (DMC)", ]
     for nr, region in enumerate(regions):
         ax = axs.flatten()[nr]
         subg = fwi.loc[region].copy()
@@ -108,8 +97,6 @@ def region_fwi_phen_doy(fwi):
         for nr_var, (variable, color) in enumerate(variables):
             if nr_var == 1:
                 pass
-                # ax = ax.twinx()
-                # ax.set_ylim(-10, 10)
             values_med = subg.loc[:, variable]["q75"]
             values_med = values_med.rolling(
                 window=14, min_periods=1, center=True
@@ -149,7 +136,10 @@ def region_fwi_phen_doy(fwi):
             )
         else:
             sns.despine(left=False, bottom=False, trim=False, offset=1, ax=ax)
+        if nr == 3:
+            ax.set_ylabel("FFMC/DMC")
         ax.set_yticks(range(0, 101, 20))
+        ax.set_ylim(0, 101)
         months = MonthLocator([3, 6, 9, 12], bymonthday=1)  # , interval=3)
         ax.xaxis.set_major_formatter(
             FuncFormatter(lambda x, pos=None: "{dt:%b}".format(dt=num2date(x)))
@@ -161,7 +151,83 @@ def region_fwi_phen_doy(fwi):
     print(lines, labels)
     # lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
     fig.legend(lines, labels, loc='lower center', frameon=False, ncol=2)
-    plt.subplots_adjust(hspace=.1)
+    plt.subplots_adjust(hspace=.08)
+    plt.savefig(
+        Path(config["data_dir"], "results/figures", "region_fwi_phen.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+
+def region_fwi_phen_doy(fwi):
+    regions = config["regions"]
+    fig, axs = plt.subplots(3, 3, figsize=(10, 7))
+    var_labels = ["Fine Fuel Moisture Code (FFMC)", "Duff Moisture Code (DMC)", ]
+    for nr, region in enumerate(regions):
+        ax = axs.flatten()[nr]
+        subg = fwi.loc[region].copy()
+        subg["date"] = pd.to_datetime(2016 * 1000 + subg.index, format="%Y%j")
+        artists = []
+        variables = [["ffmcode", color_dict[2]], ["dufmcode", color_dict[7]], ]
+        for nr_var, (variable, color) in enumerate(variables):
+            if nr_var == 1:
+                pass
+            values_med = subg.loc[:, variable]["q75"]
+            values_med = values_med.rolling(
+                window=14, min_periods=1, center=True
+            ).mean()
+            values_low = (
+                subg.loc[:, variable]["q50"]
+                .rolling(window=14, min_periods=1, center=True)
+                .mean()
+            )
+            values_high = (
+                subg.loc[:, variable]["q95"]
+                .rolling(window=14, min_periods=1, center=True)
+                .mean()
+            )
+            artists += ax.plot(subg["date"], values_med, ls="-", c=color, zorder=5, label=var_labels[nr_var])
+            artists += [
+                ax.fill_between(
+                    subg.date,
+                    values_low,
+                    values_high,
+                    color=color,
+                    alpha=0.2,
+                    zorder=4,
+                )
+            ]
+        ax.grid(True, which="major", axis='x', c="gray", ls="--", lw=1, alpha=0.2)
+        if (nr < 6):
+            sns.despine(bottom=False, left=False, trim=False, offset=1, ax=ax)
+            ax.tick_params(
+                axis="both",
+                bottom=False,
+                top=False,
+                labelbottom=False,
+                left=True,
+                right=False,
+                labelleft=True,
+            )
+        else:
+            sns.despine(left=False, bottom=False, trim=False, offset=1, ax=ax)
+        if nr == 3:
+            ax.set_ylabel("FFMC/DMC")
+        ax.set_yticks(range(0, 101, 20))
+        ax.set_ylim(0, 101)
+        months = MonthLocator([3, 6, 9, 12], bymonthday=1)  # , interval=3)
+        ax.xaxis.set_major_formatter(
+            FuncFormatter(lambda x, pos=None: "{dt:%b}".format(dt=num2date(x)))
+        )
+        ax.xaxis.set_major_locator(months)
+        ax.set_title(f"{region}", y=0.9)
+
+    lines, labels = ax.get_legend_handles_labels()
+    print(lines, labels)
+    # lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+    fig.legend(lines, labels, loc='lower center', frameon=False, ncol=2)
+    plt.subplots_adjust(hspace=.08)
     plt.savefig(
         Path(config["data_dir"], "results/figures", "region_fwi_phen.png"),
         dpi=300,
@@ -178,7 +244,7 @@ if __name__ == "__main__":
     fwi_q = pd.read_parquet(fwi_quantiles_file_name())
     # region_fwi_phen_box(fwi, phe)
     # region_fwi_phen(fwi_q, phe, fires)
-    region_fwi_phen_doy(fwi_q)
+    # region_fwi_phen_doy(fwi_q)
     # sub = fwi[(fwi.Region == "Central")].copy()
     # subg = sub.groupby("doy")
     # subg = subg.agg(
