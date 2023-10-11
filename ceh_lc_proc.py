@@ -80,12 +80,12 @@ def split_to_tiles(file_name):
             os.system(gdaltranString)
 
 
-def ceh_tiles_region_value_counts(data_dir, land_cover_file_name):
+def ceh_tiles_region_value_counts(
+    data_dir: str, land_cover_file_name: str
+) -> pd.DataFrame:
     """
-    Reads CEH land cover raster tiles found in data_dir that match
-    file_base_*, selects pixels that equal the lc argument, performs
-    binary errosion using window_size and saves the remaining
-    data to dataframe.
+    Iteratively reads CEH land cover raster tiles found in data_dir that match
+    file_base_* and compiles land cover value counts into a single results
     """
     file_base = file_name_without_extension(land_cover_file_name)
     tiles = glob.glob(str(Path(data_dir, file_base + "_*.tif")))
@@ -148,20 +148,29 @@ def ceh_tiles_binary_erosion(
     )
 
 
+def percent_cover(dfr: pd.DataFrame, lcs: list[int]) -> pd.DataFrame:
+    """Calculate percent area coverage by region by the land covers listed in lcs"""
+    total = dfr.sum(axis=0)
+    lcs_cover = dfr.loc[lcs, :].sum(axis=0)
+    return lcs_cover / total
+
 if __name__ == "__main__":
+    pass
     # To split CEH product to tiles.
     # cur_dir = os.getcwd()
     # os.chdir(config['data_dir'])
     # split_to_tiles(config['land_cover_file_name'])
     # os.chdir(cur_dir)
+    # Perform lc value counts per region
+    # dfr = ceh_tiles_region_value_counts(
+    #     config["data_dir"], config["land_cover_file_name"]
+    # )
+    # dfr.to_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
+    dfr = pd.read_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
 
-    # perform binary errosion on lc tiles
-    dfr = ceh_tiles_region_value_counts(
-        config["data_dir"], config["land_cover_file_name"]
-    )
-    dfr.to_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
 
     """
+    # perform binary errosion on lc tiles
     for lc in config['land_covers']:
         ceh_tiles_binary_erosion(lc,
                                  config['window_size'],
