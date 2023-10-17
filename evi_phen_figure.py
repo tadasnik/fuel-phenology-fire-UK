@@ -1,5 +1,4 @@
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 from matplotlib.ticker import FuncFormatter
@@ -24,6 +23,107 @@ plt.rcParams["axes.labelcolor"] = COLOR
 plt.rcParams["axes.edgecolor"] = COLOR
 plt.rcParams["xtick.color"] = COLOR
 plt.rcParams["ytick.color"] = COLOR
+
+
+def land_cover_evi_updq(pheg, fire):
+    lcs = config["land_covers"]
+    _, axs = plt.subplots(2, 4, figsize=(15, 7))
+    for nr, ax in enumerate(axs.flatten()):
+        lc = lcs[nr]
+        file_name = Path(
+            config["data_dir"],
+            "gee_results",
+            f"VNP13A1_{lc}_quantiles.parquet",
+        )
+        sub = pd.read_parquet(file_name)
+        sub["date"] = pd.to_datetime(2016 * 1000 + sub["doy"], format="%Y%j")
+        print(sub.date.min(), sub.date.max())
+        artists = []
+        artists += ax.plot(sub.date, sub.q50, ls="-", c=color_dict[lc], zorder=5)
+        artists += [
+            ax.fill_between(
+                sub.date,
+                sub.q25,
+                sub.q75,
+                color=color_dict[lc],
+                alpha=0.2,
+                zorder=4,
+            )
+        ]
+        artists += [
+            ax.fill_between(
+                sub.date,
+                sub.q5,
+                sub.q95,
+                color=color_dict[lc],
+                alpha=0.1,
+                zorder=3,
+            )
+        ]
+        phesub = phe[phe.lc == lc].copy()
+        phesub["doy"] = phesub.date.dt.dayofyear
+        pheg = phesub.groupby(["lc"])
+        pheg = pheg.agg(
+            {
+                "Onset_Greenness_Increase_1": [q25, q50, q75],
+                "Onset_Greenness_Maximum_1": [q25, q50, q75],
+                "Onset_Greenness_Decrease_1": [q25, q50, q75],
+                "Onset_Greenness_Minimum_1": [q25, q50, q75],
+                # "Date_Mid_Greenup_Phase_1": [q5, q25, q50, q75, q95],
+                # "Date_Mid_Senescence_Phase_1": [q5, q25, q50, q75, q95],
+                # "EVI2_Growing_Season_Area_1": [q5, q25, q50, q75, q95],
+                # "Growing_Season_Length_1": [q5, q25, q50, q75, q95],
+                # "EVI2_Onset_Greenness_Increase_1": [q5, q25, q50, q75, q95],
+                # "EVI2_Onset_Greenness_Maximum_1": [q5, q25, q50, q75, q95],
+            }
+        )
+        date_cols = [
+            "Onset_Greenness_Increase_1",
+            "Onset_Greenness_Maximum_1",
+            "Onset_Greenness_Decrease_1",
+            "Onset_Greenness_Minimum_1",
+        ]
+        try:
+            ph_dates = pheg.loc[lc][date_cols][:, "q50"]
+            ph_dates = pd.to_datetime(2016 * 1000 + ph_dates, format="%Y%j")
+            ph_dates_min = pheg.loc[lc][date_cols][:, "q25"]
+            ph_dates_min = pd.to_datetime(2016 * 1000 + ph_dates_min, format="%Y%j")
+            ph_dates_m = pheg.loc[lc][date_cols][:, "q75"]
+            ph_dates_m = pd.to_datetime(2016 * 1000 + ph_dates_m, format="%Y%j")
+            # low_d = ph_dates - ph_dates_min
+            # high_d = ph_dates_m - ph_dates
+            # errors = np.array(list(zip(low_d, high_d))).T
+            # ph_values = pheg.loc[region, lc].filter(like='EVI2')[:, 'q25'].values * 10000
+            # ax.scatter(ph_dates, ph_values[[0, 1, 1, 0]], color=cols_d[lc])
+            # artists += ax.errorbar(ph_dates, ph_values[[0, 1, 1, 0]], xerr=errors,
+            #              fmt='none', ecolor='k')
+            for pair in zip(ph_dates_min, ph_dates_m):
+                ax.axvspan(pair[0], pair[1], color="0.9", alpha=0.5, zorder=0)
+            for line in ph_dates:
+                ax.axvline(line, linestyle="--", color="0.5", zorder=1)
+        except KeyError:
+            continue
+        ser = fire[(fire.lc == lc)].groupby("doy")["frp"].count()
+        f_dates = pd.to_datetime(2016 * 1000 + ser.index, format="%Y%j")
+        print(f_dates.min(), f_dates.max())
+        ax2 = ax.twinx()
+        ax2.bar(f_dates, ser, color=color_dict[21], width=1, alpha=0.8, zorder=0)
+        ax2.set_ylim(0, 150)
+        ax2.set_yticks([])
+        ax.grid(True, which="major", c="gray", ls="-", lw=1, alpha=0.2)
+        months = MonthLocator([3, 6, 9, 12], bymonthday=1)  # , interval=3)
+        ax.xaxis.set_major_formatter(
+            FuncFormatter(lambda x, pos=None: "{dt:%b} {dt.day}".format(dt=num2date(x)))
+        )
+        ax.xaxis.set_major_locator(months)
+        ax.set_ylim(0.1, 0.8)
+        ax.set_title(f"{ukceh_classes[lc]}")
+    plt.savefig(
+        Path(config["data_dir"], "results/figures", "land_cover_evi2_phen.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
 
 
 def land_cover_evi(pheg, fire):
@@ -130,7 +230,7 @@ def land_cover_evi(pheg, fire):
 def region_evi(eviq, pheg, fire):
     lcs = [9, 11, 7, 10, 3, 4, 1, 2]
     eviq["date"] = pd.to_datetime(2016 * 1000 + eviq["doy"], format="%Y%j")
-    Fig, axs = plt.subplots(len(config["regions"]), len(lcs), figsize=(45, 35))
+    _, axs = plt.subplots(len(config["regions"]), len(lcs), figsize=(45, 35))
     for nr_r, axr in enumerate(axs):
         for nr_lc, ax in enumerate(axr):
             lc = lcs[nr_lc]
@@ -179,11 +279,11 @@ def region_evi(eviq, pheg, fire):
                 .groupby("doy")["frp"]
                 .count()
             )
-            sizes = (
-                fire[(fire.Region == region) & (fire.lc == lc)]
-                .groupby("doy")["size"]
-                .max()
-            )
+            # sizes = (
+            #     fire[(fire.Region == region) & (fire.lc == lc)]
+            #     .groupby("doy")["size"]
+            #     .max()
+            # )
             f_dates = pd.to_datetime(2016 * 1000 + ser.index, format="%Y%j")
             ax2 = ax.twinx()
             ax2.bar(f_dates, ser, color=color_dict[21], width=1, alpha=0.8, zorder=5)

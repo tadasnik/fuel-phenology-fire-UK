@@ -243,9 +243,9 @@ def region_fwi_phen_doy(fwi):
     regions = config["regions"]
     fig, axs = plt.subplots(3, 3, figsize=(10, 7))
     var_labels = [
-            "Fire Weather Index (FWI)"
-        # "Fine Fuel Moisture Code (FFMC)",
-        # "Duff Moisture Code (DMC)",
+        #    "Fire Weather Index (FWI)"
+        "Fine Fuel Moisture Code (FFMC)",
+        "Duff Moisture Code (DMC)",
     ]
     for nr, region in enumerate(regions):
         ax = axs.flatten()[nr]
@@ -253,25 +253,25 @@ def region_fwi_phen_doy(fwi):
         subg["date"] = pd.to_datetime(2016 * 1000 + subg.index, format="%Y%j")
         artists = []
         variables = [
-            ["fwinx", color_dict[7]],
-            # ["ffmcode", color_dict[2]],
-            # ["dufmcode", color_dict[7]],
+            # ["fwinx", color_dict[7]],
+            ["ffmcode", color_dict[2]],
+            ["dufmcode", color_dict[7]],
         ]
         for nr_var, (variable, color) in enumerate(variables):
             if nr_var == 1:
                 pass
             values_med = subg.loc[:, variable]["q75"]
             values_med = values_med.rolling(
-                window=14, min_periods=1, center=True
+                window=7, min_periods=1, center=True
             ).mean()
             values_low = (
                 subg.loc[:, variable]["q50"]
-                .rolling(window=14, min_periods=1, center=True)
+                .rolling(window=7, min_periods=1, center=True)
                 .mean()
             )
             values_high = (
-                subg.loc[:, variable]["q95"]
-                .rolling(window=14, min_periods=1, center=True)
+                subg.loc[:, variable]["q99"]
+                .rolling(window=7, min_periods=1, center=True)
                 .mean()
             )
             artists += ax.plot(
@@ -307,10 +307,10 @@ def region_fwi_phen_doy(fwi):
         else:
             sns.despine(left=False, bottom=False, trim=False, offset=1, ax=ax)
         if nr == 3:
-            # ax.set_ylabel("FFMC/DMC")
-            ax.set_ylabel("FWI")
-        ax.set_yticks(range(0, 101, 10))
-        ax.set_ylim(0, 35)
+            ax.set_ylabel("FFMC/DMC")
+            # ax.set_ylabel("FWI")
+        ax.set_yticks(range(0, 101, 20))
+        ax.set_ylim(0, 110)
         months = MonthLocator([3, 6, 9, 12], bymonthday=1)  # , interval=3)
         ax.xaxis.set_major_formatter(
             FuncFormatter(lambda x, pos=None: "{dt:%b}".format(dt=num2date(x)))

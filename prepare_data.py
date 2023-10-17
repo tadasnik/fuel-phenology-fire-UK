@@ -532,7 +532,7 @@ def phenology_phase_columns(res):
 
 if __name__ == "__main__":
     # eviq = evi_quantiles()
-    # phe:= combine_phenology()
+    phe = combine_phenology()
     # pheg = phenology_quantiles()
     # fire = UK_fire_dfr(
     #     "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_07_16.parquet",
@@ -548,7 +548,7 @@ if __name__ == "__main__":
     #     config["regions_file"],
     # )
     #
-    fwi_doy_quantiles()
+    # fwi_doy_quantiles()
     # fwi = pd.read_parquet(fwi_file_name())
     # fwi_ph = region_lc_phenology(fwi)
     # fwi_region_lc_phenology()
