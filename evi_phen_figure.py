@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
+import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 from matplotlib.dates import MonthLocator, num2date
 from configuration import config, color_dict, ukceh_classes
@@ -25,10 +26,11 @@ plt.rcParams["xtick.color"] = COLOR
 plt.rcParams["ytick.color"] = COLOR
 
 
-def land_cover_evi_updq(pheg, fire):
+def land_cover_evi_upd(pheg, fire):
     lcs = config["land_covers"]
     _, axs = plt.subplots(2, 4, figsize=(15, 7))
     for nr, ax in enumerate(axs.flatten()):
+        ax2 = ax.twinx()
         lc = lcs[nr]
         file_name = Path(
             config["data_dir"],
@@ -38,6 +40,27 @@ def land_cover_evi_updq(pheg, fire):
         sub = pd.read_parquet(file_name)
         sub["date"] = pd.to_datetime(2016 * 1000 + sub["doy"], format="%Y%j")
         print(sub.date.min(), sub.date.max())
+        if nr in [0, 4]:
+            sns.despine(bottom=False, left=False, right=True, offset=2, ax=ax)
+            ax.tick_params(
+                axis="both",
+                bottom=True,
+                top=False,
+                left=True,
+                right=False,
+                labelleft=True,
+            )
+            ax.set_ylabel("EVI2")
+        else:
+            sns.despine(bottom=False, left=True, right=True, offset=2, ax=ax)
+            ax.tick_params(
+                axis="both",
+                bottom=True,
+                top=False,
+                left=False,
+                right=False,
+                labelleft=False,
+            )
         artists = []
         artists += ax.plot(sub.date, sub.q50, ls="-", c=color_dict[lc], zorder=5)
         artists += [
@@ -69,12 +92,6 @@ def land_cover_evi_updq(pheg, fire):
                 "Onset_Greenness_Maximum_1": [q25, q50, q75],
                 "Onset_Greenness_Decrease_1": [q25, q50, q75],
                 "Onset_Greenness_Minimum_1": [q25, q50, q75],
-                # "Date_Mid_Greenup_Phase_1": [q5, q25, q50, q75, q95],
-                # "Date_Mid_Senescence_Phase_1": [q5, q25, q50, q75, q95],
-                # "EVI2_Growing_Season_Area_1": [q5, q25, q50, q75, q95],
-                # "Growing_Season_Length_1": [q5, q25, q50, q75, q95],
-                # "EVI2_Onset_Greenness_Increase_1": [q5, q25, q50, q75, q95],
-                # "EVI2_Onset_Greenness_Maximum_1": [q5, q25, q50, q75, q95],
             }
         )
         date_cols = [
@@ -90,13 +107,6 @@ def land_cover_evi_updq(pheg, fire):
             ph_dates_min = pd.to_datetime(2016 * 1000 + ph_dates_min, format="%Y%j")
             ph_dates_m = pheg.loc[lc][date_cols][:, "q75"]
             ph_dates_m = pd.to_datetime(2016 * 1000 + ph_dates_m, format="%Y%j")
-            # low_d = ph_dates - ph_dates_min
-            # high_d = ph_dates_m - ph_dates
-            # errors = np.array(list(zip(low_d, high_d))).T
-            # ph_values = pheg.loc[region, lc].filter(like='EVI2')[:, 'q25'].values * 10000
-            # ax.scatter(ph_dates, ph_values[[0, 1, 1, 0]], color=cols_d[lc])
-            # artists += ax.errorbar(ph_dates, ph_values[[0, 1, 1, 0]], xerr=errors,
-            #              fmt='none', ecolor='k')
             for pair in zip(ph_dates_min, ph_dates_m):
                 ax.axvspan(pair[0], pair[1], color="0.9", alpha=0.5, zorder=0)
             for line in ph_dates:
@@ -106,18 +116,46 @@ def land_cover_evi_updq(pheg, fire):
         ser = fire[(fire.lc == lc)].groupby("doy")["frp"].count()
         f_dates = pd.to_datetime(2016 * 1000 + ser.index, format="%Y%j")
         print(f_dates.min(), f_dates.max())
-        ax2 = ax.twinx()
-        ax2.bar(f_dates, ser, color=color_dict[21], width=1, alpha=0.8, zorder=0)
-        ax2.set_ylim(0, 150)
-        ax2.set_yticks([])
         ax.grid(True, which="major", c="gray", ls="-", lw=1, alpha=0.2)
         months = MonthLocator([3, 6, 9, 12], bymonthday=1)  # , interval=3)
         ax.xaxis.set_major_formatter(
             FuncFormatter(lambda x, pos=None: "{dt:%b} {dt.day}".format(dt=num2date(x)))
         )
-        ax.xaxis.set_major_locator(months)
+        if nr > 3:
+            ax.xaxis.set_major_locator(months)
+        else:
+            ax.xaxis.set_major_locator(months)
+            ax.set_xticklabels([])
         ax.set_ylim(0.1, 0.8)
         ax.set_title(f"{ukceh_classes[lc]}")
+        sns.despine(bottom=True, left=True, right=True, offset=2, ax=ax2)
+        ax2.bar(f_dates, ser, color=color_dict[21], width=1, alpha=0.8, zorder=-1)
+        ax2.set_ylim(0, 150)
+        ax2.set_yticks([])
+        if nr not in [3, 7]:
+            sns.despine(bottom=True, left=True, right=True, offset=2, ax=ax2)
+            ax2.tick_params(
+                axis="both",
+                bottom=False,
+                top=False,
+                left=False,
+                right=False,
+                labelleft=False,
+            )
+        else:
+            sns.despine(bottom=True, left=True, right=False, offset=2, ax=ax2)
+            ax2.set_ylabel("VIIRS fire detections", color="red")
+            ax2.set_yticks([0, 75, 150])
+            ax2.tick_params(
+                axis="both",
+                bottom=False,
+                top=False,
+                left=False,
+                right=True,
+                labelright=True,
+                labelleft=False,
+            )
+    plt.subplots_adjust(wspace=0.05)
     plt.savefig(
         Path(config["data_dir"], "results/figures", "land_cover_evi2_phen.png"),
         dpi=300,
@@ -427,7 +465,7 @@ if __name__ == "__main__":
     eviq = pd.read_parquet(evi2_quantiles_file())
     fires = pd.read_parquet(fire_file_name())
 
-    land_cover_evi(phe, fires)
+    land_cover_evi_upd(phe, fires)
     # drought_evi_vs_norm(pheg, fires)
 
     # region_evi(eviq, pheg, fires)
