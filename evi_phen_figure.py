@@ -1,20 +1,22 @@
-import pandas as pd
-import matplotlib.pyplot as plt
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
-from matplotlib.ticker import FuncFormatter
 from matplotlib.dates import MonthLocator, num2date
-from configuration import config, color_dict, ukceh_classes
+from matplotlib.ticker import FuncFormatter
+
+from configuration import color_dict, config, ukceh_classes
 from prepare_data import (
+    evi2_quantiles_file,
+    fire_file_name,
+    phenology_file,
+    phenology_quantiles_file,
     q5,
     q25,
     q50,
     q75,
     q95,
-    evi2_quantiles_file,
-    phenology_quantiles_file,
-    phenology_file,
-    fire_file_name,
 )
 
 COLOR = "0.3"
