@@ -57,7 +57,7 @@ def stack_map_legend_plot():
                 .unstack()
             )
         except IndexError:
-            region = "All"
+            region = "Combined"
             fireg = fire.groupby(["month"])["lc"].value_counts().unstack()
         fireg = fireg.fillna(0, axis=1)
         vals = []
@@ -159,6 +159,7 @@ def stack_map_legend_plot():
             region_split[nr],
             color="0.3",
             size=12,
+            weight="bold",
             ha="center",
             va="center",
             transform=ccrs.OSGB(),
