@@ -1,13 +1,14 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from pathlib import Path
-from matplotlib.ticker import FuncFormatter
 from matplotlib.dates import MonthLocator, num2date
-from configuration import config, color_dict, ukceh_classes
-from prepare_data import phenology_file
+from matplotlib.ticker import FuncFormatter
 
+from configuration import color_dict, config, ukceh_classes
+from prepare_data import phenology_file
 
 COLOR = "0.3"
 plt.rcParams["font.family"] = "Fira Sans"
@@ -20,7 +21,8 @@ plt.rcParams["ytick.color"] = COLOR
 
 def phen_values_point_plots(phe: pd.DataFrame, params: list, out_file_name):
     _, axs = plt.subplots(2, 2, figsize=(12, 10), constrained_layout=True)
-    lcs = [3, 7, 9, 10, 11]
+    # lcs = [3, 7, 9, 10]
+    lcs = [1, 2, 4, 11]
     markers = ["o", "v", "s", "*", "D", "P", "X", ">"]
     ylabels = [x.replace(" ", "\n") for x in config["regions"]]
     colors = [color_dict[x] for x in lcs]
@@ -77,7 +79,7 @@ def phen_values_point_plots(phe: pd.DataFrame, params: list, out_file_name):
         if nr > 0:
             ax.get_legend().remove()
         else:
-            ax.legend(frameon=False)
+            ax.legend(framealpha=0.5, loc="upper left", title="Land cover")
         ax.set_yticklabels(ylabels)
         ax.set_ylabel(None)
         ax.set_xlabel(f"{params[nr]['xlabel']}")
@@ -128,5 +130,7 @@ params_season_onset = [
 
 
 phe = pd.read_parquet(phenology_file())
-phen_values_point_plots(phe, params=params_season_onset, out_file_name="phen_values")
+phen_values_point_plots(
+    phe, params=params_season_onset, out_file_name="phen_values_sel"
+)
 # phen_values_point_plot(phe, params=params_season_onset, out_file_name="phen_mid_seasons")
