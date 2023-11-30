@@ -135,9 +135,22 @@ def stack_map_legend_plot():
         regions_geoms,
         ccrs.OSGB(),
         facecolor=(1, 1, 1, 0),
-        edgecolor="0.5",
-        linewidth=1,
+        edgecolor="0.6",
+        linewidth=0.1,
     )
+    reg_int_file = Path(config["data_dir"], "Hadley_regions_interior.shp")
+    c_int_shapes = shapereader.Reader(reg_int_file)
+    geoms_int = list(c_int_shapes.geometries())
+    regions_int = list(c_shapes.records())
+    regions_int_geoms = [x[1] for x in zip(regions_int, geoms_int)]
+    reg_int_feat = ShapelyFeature(
+        regions_int_geoms,
+        ccrs.OSGB(),
+        facecolor=(1, 1, 1, 0),
+        edgecolor="0.5",
+        linewidth=1.5,
+    )
+
     ds = rioxarray.open_rasterio(Path(config["data_dir"], "LCD_2018_500m.tif"))
     ds = ds.sel(band=1)
     ds_masked = ds.where(ds.isin(config["land_covers"]))
@@ -145,6 +158,7 @@ def stack_map_legend_plot():
         ax=ax, transform=ccrs.OSGB(), cmap=c_map, norm=norm, add_colorbar=False
     )
     ax.add_feature(reg_feat, zorder=2)
+    ax.add_feature(reg_int_feat, zorder=3)
     ax.add_feature(cfeature.OCEAN.with_scale("10m"), color="white", zorder=0)
     ax.set_ylim(250, 1050000)
     ax.axis("off")
@@ -158,7 +172,7 @@ def stack_map_legend_plot():
             y,
             region_split[nr],
             color="0.3",
-            size=12,
+            size=13,
             weight="bold",
             ha="center",
             va="center",
@@ -186,7 +200,7 @@ def stack_map_legend_plot():
         patch.set_y(-2.5)
     ax.set_axis_off()
     plt.savefig(
-        Path(config["data_dir"], "results/figures", "fire_clim_stack_map.png"),
+        Path(config["data_dir"], "results/figures", "fire_clim_stack_map_interior.png"),
         dpi=300,
         bbox_inches="tight",
     )
