@@ -113,11 +113,11 @@ def stack_map_legend_plot():
         "Northern\nScotland",
         "Eastern\nScotland",
         "Southern\nScotland",
-        "North\nwest",
         "North\neast",
+        "North\nwest",
         "South\nwest",
         "Central",
-        "South\neast",
+        "South east",
         "Northern\nIreland",
     ]
 
@@ -147,8 +147,8 @@ def stack_map_legend_plot():
         regions_int_geoms,
         ccrs.OSGB(),
         facecolor=(1, 1, 1, 0),
-        edgecolor="0.5",
-        linewidth=1.5,
+        edgecolor="0.3",
+        linewidth=2,
     )
 
     ds = rioxarray.open_rasterio(Path(config["data_dir"], "LCD_2018_500m.tif"))
@@ -167,17 +167,72 @@ def stack_map_legend_plot():
         x = reg.geometry.centroid.x
         y = reg.geometry.centroid.y
 
-        ax.text(
-            x,
-            y,
+        print(region_split[nr], x, y)
+        if nr == 0:
+            x1 = 105000
+            y1 = 1010000
+
+        elif nr == 1:
+            x1 = 500000
+            y1 = 890000
+
+        elif nr == 2:
+            x1 = 40000
+            y1 = 670000
+
+        elif nr == 3:
+            # North East
+            x1 = 530000
+            y1 = 630000
+        elif nr == 4:
+            # North West
+            x1 = 240000
+            y1 = 450000
+        elif nr == 5:
+            # South West
+            x1 = 130000
+            y1 = 120000
+        elif nr == 6:
+            # Central
+            x1 = 630000
+            y1 = 380000
+        elif nr == 7:
+            # South east
+            x1 = 550000
+            y1 = 50000
+        elif nr == 8:
+            # NI
+            x1 = 60000
+            y1 = 410000
+
+        else:
+            continue
+        ax.annotate(
             region_split[nr],
-            color="0.3",
-            size=13,
+            xy=(x, y),
+            xycoords="data",
+            xytext=(x1, y1),
+            textcoords="data",
+            size=12,
             weight="bold",
-            ha="center",
             va="center",
-            transform=ccrs.OSGB(),
+            ha="center",
+            arrowprops=dict(
+                arrowstyle="->", connectionstyle="arc3,rad=-0.2", color="0.3"
+            ),
         )
+
+        # ax.text(
+        #     x,
+        #     y,
+        #     region_split[nr],
+        #     color="0.3",
+        #     size=13,
+        #     weight="bold",
+        #     ha="center",
+        #     va="center",
+        #     transform=ccrs.OSGB(),
+        # )
     # ax.text(0.05, 0.95, 'B', transform=ax.transAxes, fontsize=15)
     ax = subfigs_[1].add_subplot(1, 1, 1)
     legend_elements = []
