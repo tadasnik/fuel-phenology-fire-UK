@@ -204,9 +204,6 @@ def stack_map_legend_plot():
             # NI
             x1 = 60000
             y1 = 410000
-
-        else:
-            continue
         ax.annotate(
             region_split[nr],
             xy=(x, y),
