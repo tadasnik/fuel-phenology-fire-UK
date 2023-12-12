@@ -73,7 +73,9 @@ def evi2_quantiles_file():
 
 def evi2_phen_phase_file():
     window = config["window_size"]
-    file_name = Path(config["data_dir"], "results", f"evi2_phenology_yearly_{window}.parquet")
+    file_name = Path(
+        config["data_dir"], "results", f"evi2_phenology_yearly_{window}.parquet"
+    )
     return file_name
 
 
@@ -136,8 +138,6 @@ def fwi_monthly_quantiles():
     )
     out_file_name = fwi_quantiles_monthly_file_name()
     subg.to_parquet(out_file_name)
-
-
 
 
 def fire_phenology_file_name():
@@ -373,7 +373,9 @@ def fwi_region_lc_phenology():
     ]
     results = []
     for lc in config["land_covers"]:
-        pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(level=1, axis=1)
+        pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(
+            level=1, axis=1
+        )
         res = pd.merge(
             fwi,
             pheq50.reset_index()[columns + ["Region"]],
@@ -416,7 +418,9 @@ def evi_region_lc_phenology():
             df["year"] = df.date.dt.year
             df["lc"] = lc
             df["Region"] = region
-            pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(level=1, axis=1)
+            pheq50 = pheq.loc[(slice(None), lc), (slice(None), "q50")].droplevel(
+                level=1, axis=1
+            )
             res = pd.merge(
                 df,
                 pheq50.reset_index()[columns + ["Region"]],
@@ -424,7 +428,9 @@ def evi_region_lc_phenology():
                 how="left",
             )
             res = phenology_phase_columns(res)
-            resg = res.groupby(["Region", "lc", "season", "year"])["EVI2"].quantile(.25)
+            resg = res.groupby(["Region", "lc", "season", "year"])["EVI2"].quantile(
+                0.25
+            )
             resg = resg.reset_index()
             results.append(resg)
     results = pd.concat(results)
@@ -488,7 +494,6 @@ def fire_pixel_phenology_season():
 
 
 def phenology_phase_columns(res):
-
     """Add columns with phenology phase given day of year
     column for arbitrary dataframe"""
     res["season"] = None
@@ -523,6 +528,16 @@ def phenology_phase_columns(res):
         & (res.doy <= res["Onset_Greenness_Minimum_1"]),
         "season",
     ] = "Decrease_late"
+
+    res["season_green"] = None
+    res.loc[
+        res.season.isin(["Decrease_late", "Dormant", "Increase_early"]),
+        "season_green",
+    ] = 0
+    res.loc[
+        res.season.isin(["Increase_late", "Maximum", "Decrease_early"]),
+        "season_green",
+    ] = 1
     return res
 
     def prepare_lc_counts_per_region():
@@ -532,17 +547,17 @@ def phenology_phase_columns(res):
 
 if __name__ == "__main__":
     # eviq = evi_quantiles()
-    phe = combine_phenology()
+    # phe = combine_phenology()
     # pheg = phenology_quantiles()
-    # fire = UK_fire_dfr(
-    #     "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_07_16.parquet",
-    #     config["regions_file"],
-    # )
+    fire = UK_fire_dfr(
+        "/Users/tadas/modFire/fire_lc_ndvi/data/uk_viirs_fire_2023_12_5.parquet",
+        config["regions_file"],
+    )
     # dem = combine_dem()
     # evi_files_to_parquet()
     # evi_quentiles_land_cover()
     # evi_quantiles()
-    # fire_event_phenology()
+    fire_event_phenology()
     # fwi = UK_fwi_dfr(
     #     "/Users/tadas/modFire/fire_lc_ndvi/data/fwi/uk_fwi_variables_2012_2022.parquet",
     #     config["regions_file"],
