@@ -172,7 +172,7 @@ def gee_VNP22Q2_to_drive(gee_features, out_dir, file_name):
 def MERIT_DEM_dataset(gee_features, out_dir, file_name):
     params = {
         "bands": [0, 1],
-        "bandsRename": ['elevation', 'slope'],
+        "bandsRename": ["elevation", "slope"],
         "reducer": ee.Reducer.first(),
         "scale": 500,
         "datetimeName": "date",
@@ -198,6 +198,32 @@ def MERIT_DEM_dataset(gee_features, out_dir, file_name):
             "folder": out_dir,
             "description": file_name,
             "selectors": ["date", "fid"] + params["bandsRename"],
+            "fileFormat": "CSV",
+        }
+    )
+    task.start()
+
+
+def vegatation_height(gee_features, out_dir, file_name):
+    params = {
+        "bands": [0],
+        "bandsRename": ["height"],
+        "reducer": ee.Reducer.first(),
+        "scale": 20,
+    }
+
+    height = ee.Image(
+        "projects/ee-ukfdrs/assets/height_modelling/H_results/kf12/final_height_Cal"
+    )
+
+    heightCol = ee.ImageCollection([height])
+    results = zonal_stats(heightCol, gee_features, params)
+    task = ee.batch.Export.table.toDrive(
+        **{
+            "collection": results,
+            "folder": out_dir,
+            "description": file_name,
+            "selectors": ["fid"] + params["bandsRename"],
             "fileFormat": "CSV",
         }
     )
@@ -243,7 +269,10 @@ for lc in config["land_covers"]:
     for region in dfr.Region.unique():
         print(region)
         if Path(
-            config["data_dir"], "gee_results", f"MERIT_DEM_{region}_{lc}_sample.csv"
+            # config["data_dir"], "gee_results", f"MERIT_DEM_{region}_{lc}_sample.csv"
+            config["data_dir"],
+            "gee_results",
+            f"vegetation_height_{region}_{lc}_sample.csv",
         ).is_file():
             print("file exists")
             continue
@@ -251,9 +280,12 @@ for lc in config["land_covers"]:
             print("no samples found")
             continue
         gee_features = gee_features_from_points(dfr[dfr["Region"] == region])
-        MERIT_DEM_dataset(
-            gee_features, "gee_results", f"MERIT_DEM_{region}_{lc}_sample"
+        vegatation_height(
+            gee_features, "gee_results", f"vegetation_height_{region}_{lc}_sample"
         )
+        # MERIT_DEM_dataset(
+        #     gee_features, "gee_results", f"MERIT_DEM_{region}_{lc}_sample"
+        # )
         # gee_VNP22Q2_to_drive(
         #     gee_features, "gee_results", f"VNP22Q2_{region}_{lc}_sample"
         # )

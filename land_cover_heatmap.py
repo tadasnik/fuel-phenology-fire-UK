@@ -1,7 +1,9 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-from pathlib import Path
+
 from configuration import config, ukceh_classes_n
 from prepare_data import fire_file_name
 
@@ -15,7 +17,7 @@ def fire_rates_region_lc(dfr: pd.DataFrame, fire: pd.DataFrame):
     fdfr.loc[:, "Combined"] = fdfr.sum(axis=1)
     dfrk = dfr * 400 / 1e6
     dfrk.loc[:, "Combined"] = dfrk.sum(axis=1)
-    rates = ((fdfr / dfrk).fillna(0))
+    rates = (fdfr / dfrk).fillna(0)
     rates = rates[dfrk > 20]
     rates = rates.loc[config["land_covers"], :]
     _, ax = plt.subplots(1, 1, figsize=(7, 7))
@@ -53,8 +55,9 @@ def percent_cover_heatmap(dfr: pd.DataFrame):
     ax = axs[0][0]
     sns.heatmap(prc.T, cmap="Reds", annot=True, fmt=".1f", cbar=False, ax=ax)
     xtick_labels = [ukceh_classes_n[x] for x in config["land_covers"]]
-    xtick_labels.extend(["Barren\nland", "Inland\nwater",
-                         "Other\nvegetation", "Urban\nsuburban"])
+    xtick_labels.extend(
+        ["Barren\nland", "Inland\nwater", "Other\nvegetation", "Urban\nsuburban"]
+    )
     ax.set_xticklabels(xtick_labels, rotation=90)
     ax.set_title("Land cover as % of the region's area")
     plt.savefig(
@@ -69,4 +72,3 @@ if __name__ == "__main__":
     fire = pd.read_parquet(fire_file_name())
     dfr = pd.read_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
     fire_rates_region_lc(dfr, fire)
-

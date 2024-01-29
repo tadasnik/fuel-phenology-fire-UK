@@ -32,11 +32,23 @@ for nr_row, ax_row in enumerate(axs):
         lc = lcs[nr_row]
         subg = fire[(fire.lc == lc) & (fire.season_green == 1)]
         subg = subg.groupby("year")["lc"].count().values
+        subg_ext = fire[
+            (fire.lc == lc)
+            & (fire.season_green == 1)
+            & (fire.event.isin([129622631, 129759871]))
+            # & (fire.event.isin([129622631]))
+        ]
+        print(subg_ext.groupby("lc")["frp"].count())
+        subg_ext = subg_ext.groupby("year")["lc"].count().values
 
         subd = fire[(fire.lc == lc) & (fire.season_green == 0)]
         subd = subd.groupby("year")["lc"].count().values
         color = (color_dict[lc],)
         bars = ax_col.bar(years, subg, color=color)
+        if len(subg_ext):
+            bars_ext = ax_col.bar(
+                [2018], subg_ext, edgecolor="0.3", color="None", hatch="////"
+            )
         ax_col.bar_label(bars)
         bars_i = ax_col.bar(years, subd * -1, color=color, alpha=0.5)
         ax_col.bar_label(bars_i, labels=subd)
@@ -112,7 +124,7 @@ for nr_row, ax_row in enumerate(axs):
             # )
         plt.subplots_adjust(hspace=0.05)
     plt.savefig(
-        Path(config["data_dir"], "results/figures", "year_fire_phen.png"),
+        Path(config["data_dir"], "results/figures", "year_fire_phen_sadd_winter.png"),
         dpi=300,
         bbox_inches="tight",
     )

@@ -261,9 +261,7 @@ def region_fwi_phen_doy(fwi):
             if nr_var == 1:
                 pass
             values_med = subg.loc[:, variable]["q75"]
-            values_med = values_med.rolling(
-                window=7, min_periods=1, center=True
-            ).mean()
+            values_med = values_med.rolling(window=7, min_periods=1, center=True).mean()
             values_low = (
                 subg.loc[:, variable]["q50"]
                 .rolling(window=7, min_periods=1, center=True)
@@ -321,7 +319,7 @@ def region_fwi_phen_doy(fwi):
     lines, labels = ax.get_legend_handles_labels()
     print(lines, labels)
     # lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-    #fig.legend(lines, labels, loc="lower center", frameon=False, ncol=2)
+    # fig.legend(lines, labels, loc="lower center", frameon=False, ncol=2)
     plt.subplots_adjust(hspace=0.08)
     plt.savefig(
         Path(config["data_dir"], "results/figures", "region_fwinx_phen.png"),

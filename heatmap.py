@@ -4,15 +4,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy import stats
-from matplotlib.ticker import FuncFormatter
-from matplotlib.dates import MonthLocator, num2date
-from configuration import config, color_dict, ukceh_classes
+from configuration import config
 from prepare_data import (
-    evi2_quantiles_monthly_file,
     fwi_quantiles_monthly_file_name,
     fire_phenology_file_name,
     fwi_file_name,
-    fwi_quantiles_file_name,
     fwi_phen_phase_file,
     phenology_quantiles_file,
     evi2_phen_phase_file,
@@ -93,11 +89,10 @@ def spearmanr_matrix(fwi_q, evi_q, fires):
                     results[(region, lc, variable)] = [st.statistic, st.pvalue]
     return pd.DataFrame(results)
 
+
 def scatterplot_():
     results = {}
 
-    dfr = pd.read_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
-    dfr_p = dfr.divide(dfr.sum(axis=1), axis=0).loc[lc]
     for lc in config["land_covers"]:
         dfr_p = dfr.divide(dfr.sum(axis=1), axis=0).loc[lc]
         regions = dfr_p.index[dfr_p > 0.05]
@@ -140,6 +135,7 @@ def scatterplot_():
         xy = pd.merge(
             fwi_dfr, y, left_index=True, right_index=True, how="outer"
         ).fillna(0)
+
 
 def spearmanr_correlation_phenology(evi_p, fwi_p, fires):
     """Calculate spearman correlation values for region/predictor combinations"""
@@ -197,7 +193,7 @@ def spearmanr_correlation_phenology(evi_p, fwi_p, fires):
                             st.pvalue,
                         ]
                     else:
-                        results[(region, lc, season, variable)] = [0., 1.]
+                        results[(region, lc, season, variable)] = [0.0, 1.0]
     return results
 
 
@@ -209,7 +205,7 @@ if __name__ == "__main__":
     fwi_q = pd.read_parquet(fwi_quantiles_monthly_file_name())
     fwi_p = pd.read_parquet(fwi_phen_phase_file())
     phe_q = pd.read_parquet(phenology_quantiles_file())
-    # results = spearmanr_correlation_phenology(evi_p, fwi_p, fires)
+    results = spearmanr_correlation_phenology(evi_p, fwi_p, fires)
     # res = pd.DataFrame(results)
     # res.columns = pd.MultiIndex.from_frame(
     #          pd.DataFrame(index=res.columns)
@@ -219,6 +215,7 @@ if __name__ == "__main__":
     res = pd.read_parquet("spearmanr.parquet")
     # heatmap_matrix(res)
 
+    """
     regions = config["regions"]
     lcs = config["land_covers"]
     variables = res.columns.get_level_values(3).unique()
@@ -235,18 +232,29 @@ if __name__ == "__main__":
                 pvals = (
                     res.loc[1, (region, str(lc), slice(None))].unstack().values
                 ).transpose()
-                spearr[pvals > 0.05] = 0
+                spearr[pvals > 0.2] = 0
                 print(spearr.shape)
                 im = ax.imshow(spearr, cmap="coolwarm", vmin=-1, vmax=1)
                 if nr_c == 0:
                     ax.set_yticks(range(7))
-                    ax.set_yticklabels(res.loc[0, (region, str(lc), slice(None))].unstack().columns)
+                    ax.set_yticklabels(
+                        res.loc[0, (region, str(lc), slice(None))].unstack().columns
+                    )
                     ax.set_ylabel(str(lc))
+                else:
+                    ax.set_yticks([])
                 if nr_r == 0:
                     ax.set_title(region)
                 if nr_r == 7:
                     ax.set_xticks(range(6))
-                    ax.set_xticklabels(res.loc[0, (region, str(lc), slice(None))].unstack().index.get_level_values(2), rotation=90)
+                    ax.set_xticklabels(
+                        res.loc[0, (region, str(lc), slice(None))]
+                        .unstack()
+                        .index.get_level_values(2),
+                        rotation=90,
+                    )
+                else:
+                    ax.set_xticks([])
                 # sns.heatmap(
                 #     spearr[pvals < 0.05].values,
                 #     cmap=cm,
@@ -258,18 +266,15 @@ if __name__ == "__main__":
             except KeyError:
                 pass
     plt.tight_layout()
+    plt.subplots_adjust(wspace=0.01, hspace=0.01)
     plt.show()
 
     # for region in config["regions"]:
     region = "Eastern Scotland"
     lc = 1
-    spearr = (
-        res.loc[0, (region, str(lc), slice(None))].unstack()
-    ).transpose()
-    pvals = (
-        res.loc[1, (region, str(lc), slice(None))].unstack()
-    ).transpose()
-
+    spearr = (res.loc[0, (region, str(lc), slice(None))].unstack()).transpose()
+    pvals = (res.loc[1, (region, str(lc), slice(None))].unstack()).transpose()
+    """
     # season_col = "season"
     # variables = [
     #     "drtcode",

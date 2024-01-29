@@ -9,7 +9,8 @@ import spatial as sp
 from pathlib import Path
 from osgeo import gdal
 from scipy.ndimage import binary_erosion
-from rasterstats import zonal_stats
+
+# from rasterstats import zonal_stats
 from configuration import config
 
 
@@ -154,6 +155,7 @@ def percent_cover(dfr: pd.DataFrame, lcs: list[int]) -> pd.DataFrame:
     lcs_cover = dfr.loc[lcs, :].sum(axis=0)
     return lcs_cover / total
 
+
 if __name__ == "__main__":
     pass
     # To split CEH product to tiles.
@@ -167,7 +169,6 @@ if __name__ == "__main__":
     # )
     # dfr.to_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
     dfr = pd.read_parquet(Path(config["data_dir"], "lc_counts_per_region.parquet"))
-
 
     """
     # perform binary errosion on lc tiles

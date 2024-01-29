@@ -115,13 +115,13 @@ def phenology_fire_size(fire):
                     tick.set_pad(14)
             ax_col.set_ylim(0, 38)
             plt.subplots_adjust(hspace=0.2)
-        plt.savefig(
-            Path(
-                config["data_dir"], "results/figures", "fire_phen_phase_mean_size.png"
-            ),
-            dpi=300,
-            bbox_inches="tight",
-        )
+        # plt.savefig(
+        #     Path(
+        #         config["data_dir"], "results/figures", "fire_phen_phase_mean_size.png"
+        #     ),
+        #     dpi=300,
+        #     bbox_inches="tight",
+        # )
     plt.show()
 
 
