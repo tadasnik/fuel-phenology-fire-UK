@@ -461,13 +461,98 @@ def drought_evi_vs_norm(pheg, fires):
     plt.show()
 
 
+def heatwave_sites_figure():
+    sites = pd.read_csv("/Users/tadas/modFire/heatwave_vegetation_indices/heatwave.csv")
+    sites["year"] = pd.to_datetime(sites.date).dt.year
+    sites["NDVI"] *= 0.0001
+    sites = sites[sites.pixel_reliability < 5]
+    site_ids = pd.read_csv(
+        "/Users/tadas/modFire/heatwave_vegetation_indices/heatwave_sites.csv"
+    )
+    fig, axs = plt.subplots(2, 3, figsize=(15, 7))
+    for nr in site_ids.index:
+        ax = axs.flatten()[nr]
+        df = sites[sites.fid == nr]
+        for year in df.year.unique():
+            dfy = df[df.year == year]
+            dfy = dfy.sort_values("composite_day_of_the_year")
+            if year == 2022:
+                ax.plot(dfy.composite_day_of_the_year, dfy.NDVI, c="r", zorder=1000)
+                l_2022 = ax.scatter(
+                    dfy.composite_day_of_the_year,
+                    dfy.NDVI,
+                    c="r",
+                    zorder=1000,
+                    label="2022",
+                )
+            elif year == 2018:
+                ax.plot(
+                    dfy.composite_day_of_the_year,
+                    dfy.NDVI,
+                    c="b",
+                    zorder=1000,
+                )
+                l_2018 = ax.scatter(
+                    dfy.composite_day_of_the_year,
+                    dfy.NDVI,
+                    c="b",
+                    zorder=1000,
+                    label="2018",
+                )
+            else:
+                l_rest = ax.scatter(
+                    dfy.composite_day_of_the_year,
+                    dfy.NDVI,
+                    c="0.5",
+                    label="other years",
+                )
+        ax.set_title(
+            site_ids.loc[nr, "site"]
+            + " lon: "
+            + str(site_ids.loc[nr, "longitude"].round(2))
+            + " lat: "
+            + str(site_ids.loc[nr, "Latitude"].round(2))
+        )
+        ax.legend(handles=[l_2018, l_2022])
+        ax.set_ylim((0.4, 0.9))
+        ax.set_xticks([1, 32, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335])
+        ax.set_xticklabels(
+            [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ]
+        )
+        # leg = ax.legend(handles=legend_elements, loc="center", ncol=2, frameon=False)
+        ax.set_ylabel("NDVI")
+
+    for ax in axs.flat:
+        ## check if something was plotted
+        if not bool(ax.has_data()):
+            fig.delaxes(ax)  ## delete if nothing is plotted in the axes obj
+
+    plt.savefig(
+        Path("/Users/tadas/modFire/heatwave_vegetation_indices/site_ndvi.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+
+
 if __name__ == "__main__":
     pheg = pd.read_parquet(phenology_quantiles_file())
     phe = pd.read_parquet(phenology_file())
     eviq = pd.read_parquet(evi2_quantiles_file())
     fires = pd.read_parquet(fire_file_name())
-
-    land_cover_evi_upd(phe, fires)
+    # land_cover_evi_upd(phe, fires)
     # drought_evi_vs_norm(pheg, fires)
 
     # region_evi(eviq, pheg, fires)
