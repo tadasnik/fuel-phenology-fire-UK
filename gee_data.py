@@ -102,7 +102,7 @@ def gee_features_from_points(dfr):
 
 
 def gee_VNP13A1_to_drive(gee_features, out_dir, file_name):
-    bands = ["EVI2", "pixel_reliability", "composite_day_of_the_year"]
+    bands = ["EVI2", "NDVI", "pixel_reliability", "composite_day_of_the_year"]
     params = {
         "reducer": ee.Reducer.first(),
         "bands": bands,
@@ -112,7 +112,7 @@ def gee_VNP13A1_to_drive(gee_features, out_dir, file_name):
     }
     collection_evi = ee.ImageCollection("NOAA/VIIRS/001/VNP13A1")
     start_date = "2012-01-01"
-    end_date = "2023-12-31"
+    end_date = "2024-02-29"
     filt_collection = collection_evi.filterDate(start_date, end_date).filterBounds(
         gee_features.geometry()
     )
@@ -272,7 +272,7 @@ for lc in config["land_covers"]:
             # config["data_dir"], "gee_results", f"MERIT_DEM_{region}_{lc}_sample.csv"
             config["data_dir"],
             "gee_results",
-            f"vegetation_height_{region}_{lc}_sample.csv",
+            f"VNP13A1_{region}_{lc}_sample.csv",
         ).is_file():
             print("file exists")
             continue
@@ -280,15 +280,18 @@ for lc in config["land_covers"]:
             print("no samples found")
             continue
         gee_features = gee_features_from_points(dfr[dfr["Region"] == region])
-        vegatation_height(
-            gee_features, "gee_results", f"vegetation_height_{region}_{lc}_sample"
-        )
+        # vegatation_Hheight(
+        #     gee_features, "gee_results", f"vegetation_height_{region}_{lc}_sample"
+        # )
         # MERIT_DEM_dataset(
         #     gee_features, "gee_results", f"MERIT_DEM_{region}_{lc}_sample"
         # )
         # gee_VNP22Q2_to_drive(
         #     gee_features, "gee_results", f"VNP22Q2_{region}_{lc}_sample"
         # )
+        gee_VNP13A1_to_drive(
+            gee_features, "gee_results", f"VNP13A1_{region}_{lc}_sample"
+        )
         while len(rclone.ls("remote:gee_results")) == 0:
             print("waiting for result file")
             time.sleep(60)
@@ -296,6 +299,3 @@ for lc in config["land_covers"]:
         rclone.copy("remote:gee_results", str(Path(config["data_dir"], "gee_results")))
         print("deleting result at remote")
         rclone.delete("remote:gee_results", args=["--drive-use-trash=false"])
-        # gee_VNP22Q2_to_drive(gee_features,
-        #                      'gee_results',
-        #                      f'VNP22Q2_{region}_{lc}_sample')
