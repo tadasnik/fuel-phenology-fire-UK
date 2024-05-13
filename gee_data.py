@@ -14,6 +14,32 @@ from ceh_lc_proc import sampled_lc_file_path
 ee.Initialize()
 
 
+def zonal_stats_no_datetime(ic, fc, params):
+    """Get statistics for image collection ic for features
+    in feature collection fc with optional params. Translated
+    from gee tutorial.
+    """
+
+    # Map the reduceRegions function over the image collection.
+    def map_func(img):
+        # Select bands (optionally rename), set a datetime & timestamp props.
+        img = img.select("b1")
+
+        # Subset points that intersect the given image.
+        fcSub = fc.filterBounds(img.geometry())
+
+        # Reduce the image by regions.
+        reduced = img.reduceRegions(
+            collection=fcSub, reducer=ee.Reducer.mean(), scale=20
+        )
+
+        return reduced
+
+    results = ic.map(map_func).flatten()  # .filter(ee.Filter.notNull("b1"))
+
+    return results
+
+
 def zonal_stats(ic, fc, params=None):
     """Get statistics for image collection ic for features
     in feature collection fc with optional params. Translated
@@ -93,7 +119,7 @@ def gee_features_from_points(dfr):
     for ind, row in dfr.iterrows():
         geom = (
             ee.Feature(ee.Geometry.Point([row.longitude, row.latitude]), {"fid": ind})
-            .buffer(250)
+            .buffer(20)
             .bounds()
         )
         features.append(geom)
@@ -204,26 +230,36 @@ def MERIT_DEM_dataset(gee_features, out_dir, file_name):
     task.start()
 
 
-def vegatation_height(gee_features, out_dir, file_name):
-    params = {
-        "bands": [0],
-        "bandsRename": ["height"],
-        "reducer": ee.Reducer.first(),
-        "scale": 20,
-    }
+def vegatation_agb(gee_features, out_dir, file_name):
+    agb_image = ee.Image("projects/ee-ukfdrs/assets/agb/results/agb_final/agb_final")
+    agb_col = ee.ImageCollection([agb_image])
+    results = zonal_stats_no_datetime(agb_col, gee_features, None)
 
-    height = ee.Image(
-        "projects/ee-ukfdrs/assets/height_modelling/H_results/kf12/final_height_Cal"
-    )
-
-    heightCol = ee.ImageCollection([height])
-    results = zonal_stats(heightCol, gee_features, params)
     task = ee.batch.Export.table.toDrive(
         **{
             "collection": results,
             "folder": out_dir,
             "description": file_name,
-            "selectors": ["fid"] + params["bandsRename"],
+            "selectors": ["fid"] + ["mean"],
+            "fileFormat": "CSV",
+        }
+    )
+    task.start()
+
+
+def vegatation_height(gee_features, out_dir, file_name):
+    height = ee.Image(
+        "projects/ee-ukfdrs/assets/height_modelling/H_results/kf12/final_height_Cal"
+    )
+
+    heightCol = ee.ImageCollection([height])
+    results = zonal_stats_no_datetime(heightCol, gee_features, None)
+    task = ee.batch.Export.table.toDrive(
+        **{
+            "collection": results,
+            "folder": out_dir,
+            "description": file_name,
+            "selectors": ["fid"] + ["mean"],
             "fileFormat": "CSV",
         }
     )
@@ -267,12 +303,13 @@ for lc in config["land_covers"]:
     )
     dfr = pd.read_parquet(sampled_file_name)
     for region in dfr.Region.unique():
+        out_fname = f"height_{region}_{lc}_sample.csv"
         print(region)
         if Path(
             # config["data_dir"], "gee_results", f"MERIT_DEM_{region}_{lc}_sample.csv"
             config["data_dir"],
             "gee_results",
-            f"VNP13A1_{region}_{lc}_sample.csv",
+            out_fname,
         ).is_file():
             print("file exists")
             continue
@@ -280,21 +317,21 @@ for lc in config["land_covers"]:
             print("no samples found")
             continue
         gee_features = gee_features_from_points(dfr[dfr["Region"] == region])
-        # vegatation_Hheight(
-        #     gee_features, "gee_results", f"vegetation_height_{region}_{lc}_sample"
-        # )
+        # vegatation_agb(gee_features, "gee_results", f"agb_{region}_{lc}_sample")
+        vegatation_height(gee_features, "gee_results", out_fname)
         # MERIT_DEM_dataset(
         #     gee_features, "gee_results", f"MERIT_DEM_{region}_{lc}_sample"
         # )
         # gee_VNP22Q2_to_drive(
         #     gee_features, "gee_results", f"VNP22Q2_{region}_{lc}_sample"
         # )
-        gee_VNP13A1_to_drive(
-            gee_features, "gee_results", f"VNP13A1_{region}_{lc}_sample"
-        )
+        # gee_VNP13A1_to_drive(
+        #     gee_features, "gee_results", f"VNP13A1_{region}_{lc}_sample"
+        # )
+
         while len(rclone.ls("remote:gee_results")) == 0:
             print("waiting for result file")
-            time.sleep(60)
+            time.sleep(20)
         print("copying result")
         rclone.copy("remote:gee_results", str(Path(config["data_dir"], "gee_results")))
         print("deleting result at remote")
