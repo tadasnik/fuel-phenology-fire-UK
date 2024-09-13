@@ -2,16 +2,47 @@
 Functions for querying Google Earth Engine datasets
 author: tadasnik@gmail.com
 """
+
 import ee
+import ee_extra
+from numpy import ndim
+from cloudMask import maskClouds
 import time
 import tomli
 import pandas as pd
 from pathlib import Path
 from rclone_python import rclone
+
 from ceh_lc_proc import sampled_lc_file_path
 
 # ee.Authenticate()
 ee.Initialize()
+
+
+def zonal_stats_no_timestamp(ic, fc, params):
+    """Get statistics for image collection ic for features
+    in feature collection fc with optional params. Translated
+    from gee tutorial.
+    """
+
+    # Map the reduceRegions function over the image collection.
+    def map_func(img):
+        # Select bands (optionally rename), set a datetime & timestamp props.
+        img = img.select("b1")
+
+        # Subset points that intersect the given image.
+        fcSub = fc.filterBounds(img.geometry())
+
+        # Reduce the image by regions.
+        reduced = img.reduceRegions(
+            collection=fcSub, reducer=ee.Reducer.mean(), scale=20
+        )
+
+        return reduced
+
+    results = ic.map(map_func).flatten()  # .filter(ee.Filter.notNull("b1"))
+
+    return results
 
 
 def zonal_stats_no_datetime(ic, fc, params):
@@ -77,20 +108,21 @@ def zonal_stats(ic, fc, params=None):
     # Map the reduceRegions function over the image collection.
     def map_func(img):
         # Select bands (optionally rename), set a datetime & timestamp props.
-        img = (
-            img.select(_params["bands"], _params["bandsRename"])
-            .set(_params["datetimeName"], img.date().format(_params["datetimeFormat"]))
-            .set("timestamp", img.get("system:time_start"))
-        )
+        # img = (
+        #     img.select(_params["bands"], _params["bandsRename"]).set(
+        #         _params["datetimeName"], img.date().format(_params["datetimeFormat"])
+        #     )
+        # )
 
         # Define final image property dictionary to set in output features.
-        propsFrom = ee.List(_params["imgProps"]).cat(
-            [_params["datetimeName"], "timestamp"]
-        )
-        propsTo = ee.List(_params["imgPropsRename"]).cat(
-            [_params["datetimeName"], "timestamp"]
-        )
-        imgProps = img.toDictionary(propsFrom).rename(propsFrom, propsTo)
+        # propsFrom = ee.List(_params["imgProps"]).cat(
+        #     [_params["datetimeName"], "timestamp"]
+        # )
+        # propsTo = ee.List(_params["imgPropsRename"]).cat(
+        #     [_params["datetimeName"], "timestamp"]
+        # )
+
+        # imgProps = img.toDictionary(propsFrom).rename(propsFrom, propsTo)
 
         # Subset points that intersect the given image.
         fcSub = fc.filterBounds(img.geometry())
@@ -104,7 +136,11 @@ def zonal_stats(ic, fc, params=None):
         )
 
         # Add metadata to each feature.
-        mapped = reduced.map(lambda f: f.set(imgProps))
+        mapped = reduced.map(
+            lambda f: f.set(
+                _params["datetimeName"], img.date().format(_params["datetimeFormat"])
+            )
+        )
         return mapped
 
     results = (
@@ -125,6 +161,41 @@ def gee_features_from_points(dfr):
         features.append(geom)
     gee_features = ee.FeatureCollection(features)
     return gee_features
+
+
+def gee_VNP09GA_to_drive(gee_features, out_dir, file_name, year):
+
+    # start_date = f"{year}-01-01"
+    # start_date = f"{year}-01-01"
+    start_date = "2013-12-31"
+    end_date = "2024-08-31"
+    viirsCollection = (
+        ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
+        .filterDate(start_date, end_date)
+        .filterBounds(gee_features.geometry())
+    )
+    masked_coll = maskClouds(viirsCollection)
+    ndmi_collection = masked_coll.map(compute_ndmi)
+    #
+
+    params = {
+        "reducer": ee.Reducer.mean(),
+        "bands": ["ndmi"],
+        "scale": 1000,
+        "datetimeName": "date",
+        "datetimeFormat": "YYYY-MM-dd",
+    }
+    results = zonal_stats(ndmi_collection, gee_features, params)
+    task = ee.batch.Export.table.toDrive(
+        **{
+            "collection": results,
+            "description": file_name,
+            "folder": out_dir,
+            "selectors": ["date", "fid", "ndmi"],
+            "fileFormat": "CSV",
+        }
+    )
+    task.start()
 
 
 def gee_VNP13A1_to_drive(gee_features, out_dir, file_name):
@@ -270,39 +341,98 @@ def wait_for_gee_file():
     file_list = rclone.ls("remote:gee_result")
 
 
+def compute_ndmi(image):
+    ndmi = image.normalizedDifference(["M7", "M11"]).rename("ndmi")
+    return image.addBands(ndmi)
+
+
 with open("config.toml", mode="rb") as fp:
     config = tomli.load(fp)
 
 
 """
-lc = 9
-region = 'North-east'
-sampled_file_name = sampled_lc_file_path(lc,
-                                         config['window_size'],
-                                         config['data_dir'],
-                                         config['land_cover_file_name'])
+start_date = "2018-01-01"
+end_date = "2018-12-31"
+lc = 4
+region = "Central"
+out_dir = "gee_results"
+file_name = f"VNP09GA_ndmi_{region}_{lc}_sample_masked"
+
+sampled_file_name = sampled_lc_file_path(
+    lc, config["window_size"], config["data_dir"], config["land_cover_file_name"]
+)
 dfr = pd.read_parquet(sampled_file_name)
-gee_features = gee_features_from_points(dfr[dfr['Region'] == region].sample(500))
+gee_features = gee_features_from_points(dfr[dfr["Region"] == region])
+gee_features_sub = gee_features_from_points(dfr[dfr["Region"] == region].sample(50))
+viirsCollection = (
+    ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
+    .filterDate(start_date, end_date)
+    .filterBounds(gee_features.geometry())
+)
+masked_coll = maskClouds(viirsCollection)
+ndmi_collection = masked_coll.map(compute_ndmi)
+#
 
-gee_VNP13A1_to_drive(gee_features, 'gee_results', f'VNP13A1_{region}_{lc}_sample')
-collection_evi = ee.ImageCollection('NOAA/VIIRS/001/VNP13A1')
-collection_evi = collection_evi.select(['EVI2', 'pixel_reliability',
-                                        'composite_day_of_the_year'])
-start_date = '2015-05-01'
-end_date = '2015-05-31'
-filt_collection = collection_evi.filterDate(start_date, end_date) \
-                                .filterBounds(gee_features.geometry())
+results = ndmi_collection.select(["ndmi"]).map(
+    lambda img: img.reduceRegions(
+        collection=gee_features_sub, reducer=ee.Reducer.mean(), scale=1000
+    )
+)
+params = {
+    "reducer": ee.Reducer.mean(),
+    "bands": ["ndmi"],
+    "scale": 1000,
+    "datetimeName": "date",
+    "datetimeFormat": "YYYY-MM-dd",
+}
+results = zonal_stats(ndmi_collection, gee_features_sub, params)
 
-results = filt_collection.map(zonalStats_first(gee_features)).flatten()
-
+task = ee.batch.Export.table.toDrive(
+    **{
+        "collection": results,
+        "description": file_name,
+        "folder": out_dir,
+        "selectors": ["date", "fid", "ndmi"],
+        "fileFormat": "CSV",
+    }
+)
+task.start()
 """
-for lc in config["land_covers"]:
+# task = ee.batch.Export.table.toDrive(
+#     **{
+#         "collection": gee_features_sub,
+#         "description": "Central_4_sample",
+#         "folder": out_dir,
+#         "fileFormat": "CSV",
+#     }
+# )
+# task.start()
+
+#
+#
+# collection_evi = ee.ImageCollection("NOAA/VIIRS/001/VNP13A1")
+# start_date = "2012-01-01"
+# end_date = "2024-02-29"
+
+# gee_VNP13A1_to_drive(gee_features, 'gee_results', f'VNP13A1_{region}_{lc}_sample')
+# collection_evi = ee.ImageCollection('NOAA/VIIRS/001/VNP13A1')
+# collection_evi = collection_evi.select(['EVI2', 'pixel_reliability',
+#                                         'composite_day_of_the_year'])
+# start_date = '2015-05-01'
+# end_date = '2015-05-31'
+# filt_collection = collection_evi.filterDate(start_date, end_date) \
+#                                 .filterBounds(gee_features.geometry())
+#
+# results = filt_collection.map(zonalStats_first(gee_features)).flatten()
+#
+# for lc in config["land_covers"]:
+for lc in [4]:  # , 7, 9]:
     print(lc)
     sampled_file_name = sampled_lc_file_path(
         lc, config["window_size"], config["data_dir"], config["land_cover_file_name"]
     )
     dfr = pd.read_parquet(sampled_file_name)
-    for region in dfr.Region.unique():
+    for region in dfr.Region.unique()[2:]:
         out_fname = f"height_{region}_{lc}_sample.csv"
         print(region)
         if Path(
@@ -318,7 +448,7 @@ for lc in config["land_covers"]:
             continue
         gee_features = gee_features_from_points(dfr[dfr["Region"] == region])
         # vegatation_agb(gee_features, "gee_results", f"agb_{region}_{lc}_sample")
-        vegatation_height(gee_features, "gee_results", out_fname)
+        # vegatation_height(gee_features, "gee_results", out_fname)
         # MERIT_DEM_dataset(
         #     gee_features, "gee_results", f"MERIT_DEM_{region}_{lc}_sample"
         # )
@@ -328,11 +458,18 @@ for lc in config["land_covers"]:
         # gee_VNP13A1_to_drive(
         #     gee_features, "gee_results", f"VNP13A1_{region}_{lc}_sample"
         # )
+        # for year in range(2013, 2024):
+        gee_VNP09GA_to_drive(
+            gee_features, "gee_results", f"VNP09GA_ndmi_{region}_{lc}", None
+        )
 
         while len(rclone.ls("remote:gee_results")) == 0:
             print("waiting for result file")
             time.sleep(20)
         print("copying result")
-        rclone.copy("remote:gee_results", str(Path(config["data_dir"], "gee_results")))
+        rclone.copy(
+            "remote:gee_results",
+            str(Path("/Users/tadas/modFire/ndmi/data/", "gee_results")),
+        )
         print("deleting result at remote")
         rclone.delete("remote:gee_results", args=["--drive-use-trash=false"])
