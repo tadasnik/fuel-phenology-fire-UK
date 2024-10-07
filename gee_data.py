@@ -146,7 +146,6 @@ def zonal_stats(ic, fc, params=None):
     results = (
         ic.map(map_func).flatten().filter(ee.Filter.notNull(_params["bandsRename"]))
     )
-
     return results
 
 
@@ -163,12 +162,10 @@ def gee_features_from_points(dfr):
     return gee_features
 
 
-def gee_VNP09GA_to_drive(gee_features, out_dir, file_name, year):
+def gee_VNP09GA_to_drive(gee_features, out_dir, file_name, selectors):
 
-    # start_date = f"{year}-01-01"
-    # start_date = f"{year}-01-01"
-    start_date = "2013-12-31"
-    end_date = "2024-08-31"
+    start_date = "2013-01-01"
+    end_date = "2024-09-01"
     viirsCollection = (
         ee.ImageCollection("NASA/VIIRS/002/VNP09GA")
         .filterDate(start_date, end_date)
@@ -426,13 +423,14 @@ task.start()
 # results = filt_collection.map(zonalStats_first(gee_features)).flatten()
 #
 # for lc in config["land_covers"]:
-for lc in [4]:  # , 7, 9]:
+"""
+for lc in [9]:  # , 7, 9]:
     print(lc)
     sampled_file_name = sampled_lc_file_path(
         lc, config["window_size"], config["data_dir"], config["land_cover_file_name"]
     )
     dfr = pd.read_parquet(sampled_file_name)
-    for region in dfr.Region.unique()[2:]:
+    for region in dfr.Region.unique():
         out_fname = f"height_{region}_{lc}_sample.csv"
         print(region)
         if Path(
@@ -459,17 +457,19 @@ for lc in [4]:  # , 7, 9]:
         #     gee_features, "gee_results", f"VNP13A1_{region}_{lc}_sample"
         # )
         # for year in range(2013, 2024):
-        gee_VNP09GA_to_drive(
-            gee_features, "gee_results", f"VNP09GA_ndmi_{region}_{lc}", None
-        )
+"""
 
-        while len(rclone.ls("remote:gee_results")) == 0:
-            print("waiting for result file")
-            time.sleep(20)
-        print("copying result")
-        rclone.copy(
-            "remote:gee_results",
-            str(Path("/Users/tadas/modFire/ndmi/data/", "gee_results")),
-        )
-        print("deleting result at remote")
-        rclone.delete("remote:gee_results", args=["--drive-use-trash=false"])
+# gee_VNP09GA_to_drive(
+#     gee_features, "gee_results", f"VNP09GA_ndmi_{region}_{lc}", None
+# )
+
+# while len(rclone.ls("remote:gee_results")) == 0:
+#     print("waiting for result file")
+#     time.sleep(20)
+# print("copying result")
+# rclone.copy(
+#     "remote:gee_results",
+#     str(Path("/Users/tadas/modFire/ndmi/data/", "gee_results")),
+# )
+# print("deleting result at remote")
+# rclone.delete("remote:gee_results", args=["--drive-use-trash=false"])
